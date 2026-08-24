@@ -35,7 +35,8 @@
     }
   },
   "dependencies": {
-    "schemastery": "^3.18.0"
+    "schemastery": "^3.18.0",
+    "zod": "^4.4.3"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1"
@@ -64,8 +65,7 @@
     "react-dom": "^18.3.1",
     "tsdown": "0.22.2",
     "typescript": "~5.7.2",
-    "vitest": "^3.0.0",
-    "zod": "^4.4.3"
+    "vitest": "^3.0.0"
   },
   "files": [
     "lib/index.js",

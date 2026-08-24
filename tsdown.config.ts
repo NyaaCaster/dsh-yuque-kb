@@ -17,7 +17,7 @@
  */
 import { readFile } from 'node:fs/promises'
 import { isBuiltin } from 'node:module'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, resolve as resolvePath, sep } from 'node:path'
 import type { UserConfig } from 'tsdown'
 import { transform } from 'lightningcss'
@@ -34,11 +34,17 @@ const PLATFORM_MODULES: readonly string[] = [
 /** Specifiers the parser preloads before the shell starts. */
 const PRELOADED_CLIENT_EXTERNALS: readonly string[] = ['@deepseek-ai/dsh-client-runtime/client']
 
+/** Production dependencies of this package — the host half keeps them as imports. */
+const PRODUCTION_DEPENDENCIES: readonly string[] = Object.keys(
+  JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).dependencies ?? {},
+)
+
 /** Every @deepseek-ai/* package stays external to the browser bundle (module table rows). */
 const isExternalBare = (specifier: string): boolean =>
   isBuiltin(specifier)
   || specifier.startsWith('@deepseek-ai/')
   || specifier === 'schemastery'
+  || PRODUCTION_DEPENDENCIES.some(dep => specifier === dep || specifier.startsWith(`${dep}/`))
 
 const hostConfig: UserConfig = {
   name: PLUGIN_ID,
@@ -90,11 +96,16 @@ function styleInjectionModule(
   return source.join('\n')
 }
 
+/** Path segment separating a package's tsc output from the sources it was emitted from. */
+const TYPES_MARKER = `${sep}lib${sep}types${sep}`
+
 /** Resolve a stylesheet import against physical sources (emitted or source tree). */
 function sourceAssetPath(source: string, importer: string): string {
   const emitted = resolvePath(dirname(importer), source)
   if (existsSync(emitted)) return emitted
-  return emitted
+  const boundary = emitted.indexOf(TYPES_MARKER)
+  if (boundary < 0) return emitted
+  return resolvePath(emitted.slice(0, boundary), 'src', emitted.slice(boundary + TYPES_MARKER.length))
 }
 
 interface AssetEmitter {
