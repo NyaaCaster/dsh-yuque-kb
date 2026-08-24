@@ -101,7 +101,7 @@ describe('testConnection', () => {
 })
 
 describe('listRepos', () => {
-  it('combines personal repos with accessible team repos and skips 403 teams', async () => {
+  it('returns the current user with their personal repos', async () => {
     const { client } = makeClient(
       new Map([
         ['/user', { body: { data: USER } }],
@@ -115,47 +115,12 @@ describe('listRepos', () => {
             },
           },
         ],
-        [
-          '/users/64496860/groups',
-          { body: { data: [{ id: 7, login: 'team-a', name: 'Team A' }] } },
-        ],
-        [
-          '/groups/team-a/repos',
-          {
-            body: {
-              data: [
-                { id: 2, type: 'Book', slug: 'kb', name: '团队库', namespace: 'team-a/kb', items_count: 3, public: false },
-              ],
-            },
-          },
-        ],
       ]),
     )
     const result = await client.listRepos()
     expect(result.user.login).toBe('nyaa-rgeis')
     expect(result.repos).toHaveLength(1)
-    expect(result.teams).toHaveLength(1)
-    expect(result.teams[0]?.group.login).toBe('team-a')
-    expect(result.teams[0]?.repos[0]?.namespace).toBe('team-a/kb')
-    expect(result.skipped).toHaveLength(0)
-  })
-
-  it('reports 403 team repos as skipped instead of failing', async () => {
-    const { client } = makeClient(
-      new Map([
-        ['/user', { body: { data: USER } }],
-        ['/users/nyaa-rgeis/repos', { body: { data: [] } }],
-        [
-          '/users/64496860/groups',
-          { body: { data: [{ id: 7, login: 'team-a', name: 'Team A' }] } },
-        ],
-        ['/groups/team-a/repos', { status: 403, body: { detail: '无权限' } }],
-      ]),
-    )
-    const result = await client.listRepos()
-    expect(result.teams).toHaveLength(0)
-    expect(result.skipped).toHaveLength(1)
-    expect(result.skipped[0]).toMatchObject({ kind: 'forbidden', group: expect.objectContaining({ login: 'team-a' }) })
+    expect(result.repos[0]?.namespace).toBe('nyaa-rgeis/gupg1c')
   })
 })
 

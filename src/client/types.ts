@@ -38,16 +38,10 @@ export interface DocNode {
   synced: boolean
 }
 
-/** One team group with its repos (teams only when the account has access). */
-export interface TeamNode {
-  login: string
-  name: string
-  repos: RepoNode[]
-}
-
 /** Result of GET /tree. */
 export interface TreePayload {
-  sources: { my: RepoNode[]; teams: TeamNode[] }
+  /** Personal repos of the token account. */
+  repos: RepoNode[]
   lastSyncAt: number | null
   rateRemaining: number | null
   tokenConfigured: boolean

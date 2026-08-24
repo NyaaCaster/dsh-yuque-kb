@@ -32,8 +32,8 @@ describe('KbTree', () => {
     const onToggle = vi.fn()
     render(
       <KbTree
-        my={[repo]}
-        teams={[]}
+        repos={[repo]}
+        
         expanded={{ 'repo:nyaa-rgeis/docs': true }}
         expandAll={false}
         filter=""
@@ -57,8 +57,8 @@ describe('KbTree', () => {
     const onToggleExpand = vi.fn()
     render(
       <KbTree
-        my={[repo]}
-        teams={[]}
+        repos={[repo]}
+        
         expanded={{}}
         expandAll={false}
         filter=""
@@ -74,8 +74,8 @@ describe('KbTree', () => {
   it('filters docs by name and keeps matches visible', () => {
     const { container } = render(
       <KbTree
-        my={[repo]}
-        teams={[]}
+        repos={[repo]}
+        
         expanded={{}}
         expandAll={false}
         filter="API"
@@ -96,8 +96,8 @@ describe('KbTree', () => {
     const onToggle = vi.fn()
     render(
       <KbTree
-        my={[repo]}
-        teams={[]}
+        repos={[repo]}
+        
         expanded={{ 'repo:nyaa-rgeis/docs': true }}
         expandAll={false}
         filter=""

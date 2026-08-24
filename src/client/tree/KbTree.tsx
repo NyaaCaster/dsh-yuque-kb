@@ -4,7 +4,7 @@
  * optimistic in the parent and the rendered state follows the payload.
  */
 import { useMemo } from 'react'
-import type { DocNode, RepoNode, TeamNode } from '../types.ts'
+import type { DocNode, RepoNode } from '../types.ts'
 import type { YuqueKbKey } from '../locales.ts'
 import css from './KbTree.module.css'
 
@@ -12,8 +12,7 @@ import css from './KbTree.module.css'
 export type TreeKey = `repo:${string}` | `doc:${string}`
 
 export interface KbTreeProps {
-  my: RepoNode[]
-  teams: TeamNode[]
+  repos: RepoNode[]
   expanded: Record<string, boolean>
   filter: string
   t: (key: keyof YuqueKbKey, params?: Record<string, string | number>) => string
@@ -127,10 +126,10 @@ function Toggle(props: {
 
 /**
  * Render the full tree.
- * @param props - sources, expansion map, filter, callbacks, copy.
+ * @param props - repos, expansion map, filter, callbacks, copy.
  */
 export function KbTree(props: KbTreeProps): React.JSX.Element {
-  const { teams, filter, t } = props
+  const { repos, filter, t } = props
   const filterActive = filter.trim().length > 0
   const matchesFilter = useMemo(() => {
     if (!filterActive) return () => true
@@ -144,7 +143,7 @@ export function KbTree(props: KbTreeProps): React.JSX.Element {
   return (
     <div className={css.tree}>
       <ul className={css.sectionList}>
-        {props.my.filter(repoVisible).map(repo => (
+        {repos.filter(repoVisible).map(repo => (
           <li key={repo.namespace} className={css.sectionItem}>
             <div className={css.sectionHeader}>{t('myRepos')}</div>
             <ul className={css.repoList}>
@@ -160,27 +159,8 @@ export function KbTree(props: KbTreeProps): React.JSX.Element {
             </ul>
           </li>
         ))}
-        {teams.map(team => (
-          <li key={team.login} className={css.sectionItem}>
-            <div className={css.sectionHeader}>{t('teamRepos', { name: team.name })}</div>
-            <ul className={css.repoList}>
-              {team.repos.filter(repoVisible).map(repo => (
-                <RepoRow
-                  key={repo.namespace}
-                  repo={repo}
-                  expanded={props.expanded[`repo:${repo.namespace}`] === true || props.expandAll}
-                  filterActive={filterActive}
-                  matchesFilter={matchesFilter}
-                  t={t}
-                  onToggleExpand={props.onToggleExpand}
-                  onToggle={props.onToggle}
-                />
-              ))}
-            </ul>
-          </li>
-        ))}
       </ul>
-      {props.my.length === 0 && teams.length === 0
+      {repos.length === 0
         ? <p className={css.empty}>{t('neverSynced')}</p>
         : null}
     </div>

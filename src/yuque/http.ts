@@ -47,7 +47,7 @@ export class YuqueApiError extends Error {
 
 /** Configuration for {@link createYuqueHttp}. */
 export interface YuqueHttpOptions {
-  /** Yuque personal/team token (`X-Auth-Token`). */
+  /** Yuque personal token (`X-Auth-Token`). */
   token: string
   /** API base URL (default: official v2 endpoint). */
   baseUrl?: string

@@ -43,7 +43,7 @@ export interface Config {
   announceToAgent?: boolean
   /** Run an incremental sync at startup (default off; only when a token is configured). */
   syncOnStartup?: boolean
-  /** Yuque personal/team token (`X-Auth-Token`); secret, never echoed back. */
+  /** Yuque personal token (`X-Auth-Token`); secret, never echoed back. */
   yuqueToken?: string
   /** Client-side request rate cap (Yuque compliance; default 3 req/s). */
   rateLimitPerSec?: number

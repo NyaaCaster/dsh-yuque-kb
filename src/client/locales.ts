@@ -29,7 +29,6 @@ export interface YuqueKbKey {
   expandAll: string
   filterPlaceholder: string
   myRepos: string
-  teamRepos: string
   docsCount: string
   syncedBadge: string
   notSyncedBadge: string
@@ -72,7 +71,6 @@ export const zh: YuqueKbKey & Record<string, string> = {
   expandAll: '全部展开',
   filterPlaceholder: '按名称过滤文档',
   myRepos: '我的知识库',
-  teamRepos: '团队：{name}',
   docsCount: '{n} 篇',
   syncedBadge: '已同步',
   notSyncedBadge: '未同步',
@@ -112,7 +110,6 @@ export const en: YuqueKbKey & Record<string, string> = {
   expandAll: 'Expand all',
   filterPlaceholder: 'Filter docs by name',
   myRepos: 'My books',
-  teamRepos: 'Team: {name}',
   docsCount: '{n} docs',
   syncedBadge: 'synced',
   notSyncedBadge: 'not synced',

@@ -33,21 +33,7 @@ export interface YuqueUser {
   updated_at?: string
 }
 
-/** A team (`/users/{id}/groups`) the token can access. */
-export interface YuqueGroup {
-  id: number
-  /** URL path segment of the team. */
-  login: string
-  name: string
-  description?: string
-  avatar_url?: string
-  members_count?: number
-  public_repos_count?: number
-  created_at?: string
-  updated_at?: string
-}
-
-/** A knowledge base (repo), personal or team-owned. */
+/** A knowledge base (repo). */
 export interface YuqueRepo {
   id: number
   /** Usually `Book`. */
@@ -58,8 +44,6 @@ export interface YuqueRepo {
   namespace: string
   /** Owner user object (present for personal repos). */
   user?: YuqueUser
-  /** Owner team object (present for team repos). */
-  group?: YuqueGroup
   description?: string
   /** Number of docs in the repo. */
   items_count: number

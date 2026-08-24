@@ -44,7 +44,6 @@ export type {
   StatusPayload,
   SyncProgress,
   SyncResult,
-  TeamNode,
   TestResult,
   ToggleRequest,
   TokenWriteRequest,

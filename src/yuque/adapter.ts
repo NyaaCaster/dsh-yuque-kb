@@ -11,7 +11,6 @@ import type {
   RateLimit,
   YuqueDocDetail,
   YuqueDocSummary,
-  YuqueGroup,
   YuqueLakeSheet,
   YuqueRepo,
   YuqueTocNode,
@@ -50,25 +49,10 @@ export interface TestConnectionResult {
   rateLimit: RateLimit | null
 }
 
-/** One team's repos as seen by the token. */
-export interface TeamRepos {
-  group: YuqueGroup
-  repos: YuqueRepo[]
-}
-
-/** Repos that could not be fetched (403 etc.), with the reason. */
-export interface SkippedSource {
-  group: YuqueGroup
-  kind: string
-  message: string
-}
-
-/** Full repo listing: personal repos + each accessible team's repos. */
+/** Full repo listing of the current user's personal repos. */
 export interface ListReposResult {
   user: YuqueUser
   repos: YuqueRepo[]
-  teams: TeamRepos[]
-  skipped: SkippedSource[]
 }
 
 /** Normalized markdown output of {@link YuqueClient.getDocMarkdown}. */
@@ -89,11 +73,7 @@ export interface YuqueClient {
   getUser(): Promise<YuqueUser>
   /** Personal repos of the current user (`/users/{login}/repos`). */
   listUserRepos(): Promise<YuqueRepo[]>
-  /** Teams the token can access (`/users/{id}/groups`, paged ×100). */
-  listGroups(): Promise<YuqueGroup[]>
-  /** Repos of one team (`/groups/{login}/repos`). */
-  listGroupRepos(groupLogin: string): Promise<YuqueRepo[]>
-  /** Personal + team repos (team 403s are skipped and reported). */
+  /** Current user + personal repos (`{ user, repos }`). */
   listRepos(): Promise<ListReposResult>
   /** Flat TOC tree of a repo (`/repos/{namespace}/toc`). */
   getToc(namespace: string): Promise<YuqueTocNode[]>
@@ -163,42 +143,10 @@ export function createYuqueClient(options: YuqueClientOptions): YuqueClient {
     return unwrap<YuqueRepo[]>(await http.request(`/users/${encodeURIComponent(user.login)}/repos`))
   }
 
-  async function listGroups(): Promise<YuqueGroup[]> {
-    const user = await getUser()
-    const groups: YuqueGroup[] = []
-    // Research: this endpoint serves fixed-size pages of 100.
-    for (let page = 1; ; page++) {
-      const result = await http.request(`/users/${user.id}/groups?page=${page}`)
-      const batch = unwrap<YuqueGroup[]>(result)
-      groups.push(...batch)
-      const total = readTotal(result)
-      if (total === undefined || groups.length >= total || batch.length === 0) break
-    }
-    return groups
-  }
-
-  async function listGroupRepos(groupLogin: string): Promise<YuqueRepo[]> {
-    return unwrap<YuqueRepo[]>(
-      await http.request(`/groups/${encodeURIComponent(groupLogin)}/repos`),
-    )
-  }
-
   async function listRepos(): Promise<ListReposResult> {
     const user = await getUser()
     const repos = await listUserRepos()
-    const groups = await listGroups()
-    const teams: TeamRepos[] = []
-    const skipped: SkippedSource[] = []
-    for (const group of groups) {
-      try {
-        teams.push({ group, repos: await listGroupRepos(group.login) })
-      } catch (err) {
-        const api = err instanceof YuqueApiError ? err : new YuqueApiError('unknown', String(err), null)
-        // Design decision Q5-2: inaccessible team repos are skipped, not fatal.
-        skipped.push({ group, kind: api.kind, message: api.message })
-      }
-    }
-    return { user, repos, teams, skipped }
+    return { user, repos }
   }
 
   async function getToc(namespace: string): Promise<YuqueTocNode[]> {
@@ -240,8 +188,6 @@ export function createYuqueClient(options: YuqueClientOptions): YuqueClient {
     testConnection,
     getUser,
     listUserRepos,
-    listGroups,
-    listGroupRepos,
     listRepos,
     getToc,
     listDocs,

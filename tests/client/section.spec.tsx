@@ -17,7 +17,7 @@ const t = (key: keyof typeof zh, params?: Record<string, string | number>): stri
 function stubApi(): KbApi & { readTree: ReturnType<typeof vi.fn>; writeToken: ReturnType<typeof vi.fn>; test: ReturnType<typeof vi.fn>; startSync: ReturnType<typeof vi.fn>; readStatus: ReturnType<typeof vi.fn>; toggle: ReturnType<typeof vi.fn> } {
   return {
     readTree: vi.fn().mockResolvedValue({
-      sources: { my: [], teams: [] },
+      repos: [],
       lastSyncAt: null,
       rateRemaining: 4999,
       tokenConfigured: false,

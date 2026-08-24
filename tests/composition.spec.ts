@@ -25,18 +25,13 @@ import * as YuqueKb from '../src/index.ts'
 import { CallId } from '@deepseek-ai/dsh-llm/brand'
 
 // ---------------------------------------------------------------------------
-// Yuque HTTP mock (whole account: 1 personal repo + 1 team repo, 3 docs).
+// Yuque HTTP mock (whole account: 1 personal repo, 2 docs).
 // ---------------------------------------------------------------------------
 
 const USER = { id: 100, login: 'me', name: 'Me', books_count: 1, public_books_count: 0 }
-const GROUP = { id: 200, login: 'g-team', name: 'G Team', description: '' }
 const REPO_1 = {
   id: 1, type: 'Book', slug: 'book1', name: 'Book One', namespace: 'me/book1',
   items_count: 2, content_updated_at: '2026-08-01T00:00:00.000Z', public: true,
-}
-const REPO_2 = {
-  id: 2, type: 'Book', slug: 'tbook', name: 'Team Book', namespace: 'g-team/tbook',
-  items_count: 1, content_updated_at: '2026-08-02T00:00:00.000Z', public: false, group: GROUP,
 }
 const TOC_1 = [
   { uuid: 'g1', type: 'TITLE', title: '指南', level: 1 },
@@ -49,13 +44,6 @@ const DOCS_1 = [
 ]
 const BODY_A = '# Doc A\n\n这是第一段语雀文档内容，包含关键术语 alpha-beta 与配置示例。\n\n```ts\nconst alpha = 1\n```'
 const BODY_B = '# Doc B\n\n另一篇文档，讨论 beta 模式与语雀知识库使用。'
-const TOC_2 = [
-  { uuid: 't1', type: 'DOC', title: 'Doc T1', slug: 'doc-t1', doc_id: 21, level: 1 },
-]
-const DOCS_2 = [
-  { id: 21, slug: 'doc-t1', title: 'Doc T1', book_id: 2, content_updated_at: '2026-08-02T00:00:00.000Z', updated_at: '2026-08-02T00:00:00.000Z' },
-]
-const BODY_T1 = '# Doc T1\n\n团队库的专有术语 trigram-probe。'
 
 /** One pathname → responder table; missing keys fail the test loudly. */
 function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
@@ -86,8 +74,6 @@ function createYuqueMock(): { fetch: typeof fetch; calls: Array<{ pathname: stri
     if (path === '/api/v2/hello') return ok({ message: 'Hello' })
     if (path === '/api/v2/user') return ok(USER)
     if (path === '/api/v2/users/me/repos') return ok([REPO_1])
-    if (path === '/api/v2/users/100/groups') return withMeta([GROUP], { total: 1 })
-    if (path === '/api/v2/groups/g-team/repos') return ok([REPO_2])
     if (path === '/api/v2/repos/me/book1/toc') return ok(TOC_1)
     if (path === '/api/v2/repos/me/book1/docs' && query.get('offset') === '0') {
       return withMeta(DOCS_1, { total: 2 })
@@ -98,14 +84,6 @@ function createYuqueMock(): { fetch: typeof fetch; calls: Array<{ pathname: stri
     }
     if (path === '/api/v2/repos/me/book1/docs/doc-b') {
       const detail = { id: 12, slug: 'doc-b', title: 'Doc B', book_id: 1, format: 'markdown', body: BODY_B }
-      return ok(detail)
-    }
-    if (path === '/api/v2/repos/g-team/tbook/toc') return ok(TOC_2)
-    if (path === '/api/v2/repos/g-team/tbook/docs' && query.get('offset') === '0') {
-      return withMeta(DOCS_2, { total: 1 })
-    }
-    if (path === '/api/v2/repos/g-team/tbook/docs/doc-t1') {
-      const detail = { id: 21, slug: 'doc-t1', title: 'Doc T1', book_id: 2, format: 'markdown', body: BODY_T1 }
       return ok(detail)
     }
     if (path === '/api/v2/search') {
@@ -344,10 +322,10 @@ describe('composition: kb_sync / kb_search / kb_read', () => {
       errors: unknown[]
     }>(syncResult)
     expect(value.kind).toBe('foreground')
-    expect(value).toMatchObject({ synced: 3, added: 3, updated: 0, removed: 0, rateRemaining: 4900 })
+    expect(value).toMatchObject({ synced: 2, added: 2, updated: 0, removed: 0, rateRemaining: 4900 })
     expect(value.errors).toEqual([])
     // Model-visible render.
-    expect(textOf(syncResult)).toContain('synced 3 docs (added 3, updated 0, removed 0)')
+    expect(textOf(syncResult)).toContain('synced 2 docs (added 2, updated 0, removed 0)')
 
     // kb_search: 3+ char token through FTS MATCH, snippet around the hit.
     const search = await runTool(h.ctx, 'kb_search', { query: 'alpha-beta', limit: 5 })
@@ -448,8 +426,8 @@ describe('composition: kb_search_remote', () => {
     await runTool(h.ctx, 'kb_sync', {})
     const result = await runTool(h.ctx, 'kb_search_remote', { query: '酒馆', limit: 10 })
     const value = valueOf<{ total: number; items: Array<{ docId: string; title: string; repo: string; url: string; summary: string }> }>(result)
-    // The stranger-owned hit is filtered out by the default account scope.
-    expect(value.items).toHaveLength(2)
+    // The team/stranger-owned hits are filtered out by the default account scope.
+    expect(value.items).toHaveLength(1)
     expect(value.items[0]).toMatchObject({
       docId: '31',
       title: '酒馆配置',
@@ -465,11 +443,11 @@ describe('composition: kb_search_remote', () => {
     const h = await harness()
     await runTool(h.ctx, 'kb_sync', {})
     const before = h.mock.calls.length
-    const result = await runTool(h.ctx, 'kb_search_remote', { query: 'x', scope: 'g-team/tbook' })
+    const result = await runTool(h.ctx, 'kb_search_remote', { query: 'x', scope: 'me/book1' })
     const value = valueOf<{ items: unknown[] }>(result)
     expect(value.items).toHaveLength(3)
     const searchCall = h.mock.calls.find(call => call.pathname === '/api/v2/search')
-    expect(searchCall?.query).toContain('scope=g-team%2Ftbook')
+    expect(searchCall?.query).toContain('scope=me%2Fbook1')
     expect(h.mock.calls.length).toBeGreaterThan(before)
   })
 })
@@ -498,29 +476,25 @@ describe('composition: /api routes', () => {
     expect(synced.status).toBe(200)
     expect(synced.body).toEqual({ ok: true })
 
-    // Tree: personal + team grouping, docs with sync state.
+    // Tree: personal repo with docs and sync state.
     const tree = await getJson(h, '/api/dsh-yuque-kb/tree')
     expect(tree.status).toBe(200)
     const treeBody = tree.body as {
-      sources: { my: Array<{ namespace: string; name: string; enabled: boolean; itemsCount: number; docs: Array<{ docId: string; synced: boolean; enabled: boolean }> }>; teams: Array<{ login: string; name: string; repos: unknown[] }> }
+      repos: Array<{ namespace: string; name: string; enabled: boolean; itemsCount: number; docs: Array<{ docId: string; synced: boolean; enabled: boolean }> }>
       lastSyncAt: number | null
     }
     expect(treeBody.lastSyncAt).toBeTypeOf('number')
-    expect(treeBody.sources.my[0]).toMatchObject({
+    expect(treeBody.repos[0]).toMatchObject({
       namespace: 'me/book1', name: 'Book One', enabled: true, itemsCount: 2,
     })
-    expect(treeBody.sources.my[0]!.docs).toHaveLength(2)
-    expect(treeBody.sources.my[0]!.docs.every(doc => doc.synced)).toBe(true)
-    expect(treeBody.sources.teams[0]).toMatchObject({ login: 'g-team', name: 'g-team' })
-    const teamRepos = treeBody.sources.teams[0]!.repos as Array<{ namespace: string; docs: Array<{ synced: boolean }> }>
-    expect(teamRepos[0]).toMatchObject({ namespace: 'g-team/tbook' })
-    expect(teamRepos[0]!.docs.every(doc => doc.synced)).toBe(true)
+    expect(treeBody.repos[0]!.docs).toHaveLength(2)
+    expect(treeBody.repos[0]!.docs.every(doc => doc.synced)).toBe(true)
 
     // Toggle reflects in the tree immediately.
     await postJson(h, '/api/dsh-yuque-kb/toggle', { kind: 'doc', id: '12', enabled: false })
     const tree2 = await getJson(h, '/api/dsh-yuque-kb/tree')
-    const tree2Body = tree2.body as { sources: { my: Array<{ docs: Array<{ docId: string; enabled: boolean }> }> } }
-    expect(tree2Body.sources.my[0]!.docs.find(doc => doc.docId === '12')?.enabled).toBe(false)
+    const tree2Body = tree2.body as { repos: Array<{ docs: Array<{ docId: string; enabled: boolean }> }> }
+    expect(tree2Body.repos[0]!.docs.find(doc => doc.docId === '12')?.enabled).toBe(false)
 
     // Status carries the sync outcome + rate snapshot.
     const status = await getJson(h, '/api/dsh-yuque-kb/status')
@@ -532,10 +506,10 @@ describe('composition: /api routes', () => {
     await postJson(h, '/api/dsh-yuque-kb/token', { token: 'runtime-secret' })
     // Refresh builds the catalogue without fetching bodies.
     const tree = await getJson(h, '/api/dsh-yuque-kb/tree?refresh=true')
-    const body = tree.body as { sources: { my: Array<{ docs: Array<{ docId: string; synced: boolean }> }> }; lastSyncAt: number | null }
+    const body = tree.body as { repos: Array<{ docs: Array<{ docId: string; synced: boolean }> }>; lastSyncAt: number | null }
     expect(tree.status).toBe(200)
     expect(body.lastSyncAt).toBeNull()
-    expect(body.sources.my[0]!.docs.every(doc => doc.synced === false)).toBe(true)
+    expect(body.repos[0]!.docs.every(doc => doc.synced === false)).toBe(true)
     // Keeping lastSyncAt null: refresh is not a sync.
     const status = await getJson(h, '/api/dsh-yuque-kb/status')
     expect(status.body).toMatchObject({ lastSyncAt: null })
@@ -560,9 +534,9 @@ describe('composition: syncOnStartup', () => {
       return body.lastSyncAt !== null
     })
     // And the search confirms the content is indexed.
-    const search = await runTool(h.ctx, 'kb_search', { query: 'trigram-probe' })
+    const search = await runTool(h.ctx, 'kb_search', { query: '知识库使用' })
     const value = valueOf<{ total: number; items: Array<{ title: string }> }>(search)
     expect(value.total).toBe(1)
-    expect(value.items[0]!.title).toBe('Doc T1')
+    expect(value.items[0]!.title).toBe('Doc B')
   })
 })

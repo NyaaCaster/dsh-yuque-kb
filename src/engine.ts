@@ -88,10 +88,8 @@ export interface SyncResult {
 
 /** `GET /api/dsh-yuque-kb/tree` catalogue (SSOT §3.2 + P4 contract update). */
 export interface TreePayload {
-  sources: {
-    my: TreeRepo[]
-    teams: Array<{ login: string; name: string; repos: TreeRepo[] }>
-  }
+  /** Personal repos of the token account. */
+  repos: TreeRepo[]
   lastSyncAt: number | null
   rateRemaining: number | null
 }
@@ -364,8 +362,8 @@ export function createEngine(engineOptions: KbEngineOptions): KbEngine {
   /** Rebuild the local catalogue (repos + toc + doc lists) without bodies. */
   async function refreshCatalog(signal?: AbortSignal): Promise<void> {
     const client = makeClient(signal)
-    const { repos, teams } = await client.listRepos()
-    const allRepos = [...repos, ...teams.flatMap(team => team.repos)]
+    const { repos } = await client.listRepos()
+    const allRepos = repos
     const failures: string[] = []
     for (const repo of allRepos) {
       try {
@@ -407,7 +405,7 @@ export function createEngine(engineOptions: KbEngineOptions): KbEngine {
           name: repo.name,
           type: repo.type,
           enabled: getRepo(domain, repo.namespace as RepoId)?.enabled ?? true,
-          team: repo.group?.login ?? null,
+          team: null,
           updatedAt: now(),
           itemsCount: docs.length,
         })
@@ -435,8 +433,7 @@ export function createEngine(engineOptions: KbEngineOptions): KbEngine {
     const counts = { synced: 0, added: 0, updated: 0, removed: 0 }
     try {
       const client = makeClient(signal)
-      const { repos: userRepos, teams } = await client.listRepos()
-      const repoList = [...userRepos, ...teams.flatMap(team => team.repos)]
+      const { repos: repoList } = await client.listRepos()
       const targeted = reposFilter === undefined || reposFilter.length === 0
         ? repoList
         : repoList.filter(repo => reposFilter.includes(repo.namespace))
@@ -557,7 +554,7 @@ export function createEngine(engineOptions: KbEngineOptions): KbEngine {
           name: repo.name,
           type: repo.type,
           enabled: previousRepo?.enabled ?? true,
-          team: repo.group?.login ?? null,
+          team: null,
           updatedAt: now(),
           itemsCount: remoteDocs.length,
         })
@@ -607,16 +604,8 @@ export function createEngine(engineOptions: KbEngineOptions): KbEngine {
         docs,
       }
     }
-    const personal = repos.filter(record => record.team === null).map(repoNode)
-    const teamLogins = [...new Set(repos.map(record => record.team).filter((team): team is string => team !== null))]
-    const teams = teamLogins.map(login => ({
-      login,
-      // V0.1: the domain stores no team display name; the login stands in.
-      name: login,
-      repos: repos.filter(record => record.team === login).map(repoNode),
-    })).sort((left, right) => left.login.localeCompare(right.login))
     return {
-      sources: { my: personal, teams },
+      repos: repos.map(repoNode),
       lastSyncAt: global.lastSyncAt,
       rateRemaining: global.rateRemaining,
     }
@@ -710,7 +699,7 @@ export function createEngine(engineOptions: KbEngineOptions): KbEngine {
     const body = result.body as { meta?: { total?: unknown }; data?: unknown }
     const total = typeof body.meta?.total === 'number' ? body.meta.total : 0
     const data = Array.isArray(body.data) ? body.data : []
-    // Default scope = this account's repos (personal + accessible teams): a
+    // Default scope = this account's personal repos: a
     // client-side filter over the result URLs (V0.1 approximation, see README).
     const allow = new Set<string>()
     for (const repo of domain.table('repos').keys()) {

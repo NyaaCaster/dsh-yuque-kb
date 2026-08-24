@@ -2,7 +2,7 @@
 
 把语雀（yuque.com）文档接入 dsh（DeepSeek Harness）作为模型知识库的插件。
 
-- 增量同步个人（及权限内团队）知识库到本地 FTS5 索引（`node:sqlite`，零原生依赖）
+- 增量同步个人知识库到本地 FTS5 索引（`node:sqlite`，零原生依赖）
 - 模型工具：`kb_sync`（增量同步，支持后台任务）/ `kb_search`（本地离线检索，不耗语雀额度）/ `kb_read`（分块读正文，未同步文档实时回源）/ `kb_search_remote`（语雀云端实时搜索兜底）
 - `systemPrompt` 公告段（order 150，`announceToAgent` 可关）
 - `/api/dsh-yuque-kb/*` 路由族（loopback 信任栅栏）：`test` / `tree` / `toggle` / `sync` / `status` / `token`
@@ -59,8 +59,7 @@ dsh plugin --profile web add ./dsh-yuque-kb-0.1.0.tgz
 
 - 语雀开放 API 仅用于正常读写：插件只读、增量同步、默认 3 req/s 节流、429 退避、详情偶发 404 有限重试。
 - Token 为超级会员权益；secret 字段经 `role('secret')` 存储，不随任何响应回显。
-- `kb_search_remote` 缺省 scope 是**客户端过滤近似**（按结果 URL 首段过滤到账号可见库），非语雀服务端 scope 限制；显式 `scope` 参数原样透传（库 namespace 或团队 login）。
-- 树形目录中团队显示名暂用团队 login 代替（领域不存团队名）。
+- `kb_search_remote` 缺省 scope 是**客户端过滤近似**（按结果 URL 首段过滤到个人知识库），非语雀服务端 scope 限制；显式 `scope` 参数原样透传（库 namespace）。
 - `synced` 标记约定：文档记录 `format` 非空即视为已索引；刷新目录产生的占位记录（正文未拉取）显示为未同步。
 - 后台任务（`kb_sync` 后台 / `/api/.../sync` jobId）依赖宿主装配 `@deepseek-ai/dsh-jobs`；未装配时后台调用报错、`/sync` 路由降级为前台同步（请求阻塞至完成）。
 - 图片以 URL 引用保留；私有图直链鉴权未支持（V2 评估）。

@@ -139,18 +139,9 @@ export function YuqueKbSection(props: YuqueKbSectionProps): React.JSX.Element {
     const previous = tree
     setTree({
       ...tree,
-      sources: {
-        ...tree.sources,
-        my: tree.sources.my.map(repo => kind === 'repo' && repo.namespace === id
-          ? { ...repo, enabled }
-          : { ...repo, docs: repo.docs.map(doc => kind === 'doc' && doc.docId === id ? { ...doc, enabled } : doc) }),
-        teams: tree.sources.teams.map(team => ({
-          ...team,
-          repos: team.repos.map(repo => kind === 'repo' && repo.namespace === id
-            ? { ...repo, enabled }
-            : { ...repo, docs: repo.docs.map(doc => kind === 'doc' && doc.docId === id ? { ...doc, enabled } : doc) }),
-        })),
-      },
+      repos: tree.repos.map(repo => kind === 'repo' && repo.namespace === id
+        ? { ...repo, enabled }
+        : { ...repo, docs: repo.docs.map(doc => kind === 'doc' && doc.docId === id ? { ...doc, enabled } : doc) }),
     })
     try {
       await api.toggle({ kind, id, enabled })
@@ -194,7 +185,7 @@ export function YuqueKbSection(props: YuqueKbSectionProps): React.JSX.Element {
   const syncing = status?.syncing === true
   const progress = status?.progress ?? null
   const totalDocs = tree === null ? 0
-    : [...tree.sources.my, ...tree.sources.teams.flatMap(team => team.repos)].reduce((sum, repo) => sum + repo.docs.length, 0)
+    : tree.repos.reduce((sum, repo) => sum + repo.docs.length, 0)
 
   return (
     <div className={css.section}>
@@ -306,8 +297,7 @@ export function YuqueKbSection(props: YuqueKbSectionProps): React.JSX.Element {
         {loaded
           ? (
             <KbTree
-              my={tree?.sources.my ?? []}
-              teams={tree?.sources.teams ?? []}
+              repos={tree?.repos ?? []}
               expanded={expanded}
               expandAll={expandAll}
               filter={filter}

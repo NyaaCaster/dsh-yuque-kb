@@ -324,11 +324,11 @@ export function kbSearchRemoteTool(engine: KbEngine, config: () => KbEngineConfi
     name: 'kb_search_remote',
     description: 'Search Yuque in the cloud (live API; consumes Yuque API quota, not the local index). '
       + 'Use when kb_search misses or when the user asks for content that may not be synced yet. '
-      + 'Default scope: this account\'s own repos (personal + accessible teams). '
-      + 'An explicit scope is passed through verbatim (a repo namespace such as `login/slug`, or a team login).',
+      + 'Default scope: this account\'s own personal repos. '
+      + 'An explicit scope is passed through verbatim (a repo namespace such as `login/slug`).',
     parameters: {
       query: { type: 'string', required: true, description: 'Search query (up to 200 characters).' },
-      scope: { type: 'string', description: 'Restrict to one repo namespace (`login/slug`) or a team login; default: this account\'s repos.' },
+      scope: { type: 'string', description: 'Restrict to one repo namespace (`login/slug`); default: this account\'s repos.' },
       limit: { type: 'integer', description: 'Max hits (1..20; default 10).' },
       strict: { type: 'boolean', description: 'Pass strict matching to Yuque (exact-term behaviour).' },
     },
