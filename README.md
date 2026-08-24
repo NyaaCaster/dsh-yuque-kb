@@ -37,11 +37,23 @@ pnpm run build      # tsc + tsdown（宿主 ESM + 浏览器 closure-factory bund
 pnpm run test       # vitest（含真实组合测试 tests/composition.spec.ts）
 ```
 
-## 安装（V0.1 交付时补充）
+## 安装
 
 ```sh
-dsh plugin --profile web add <path-or-tarball>
+# 方式一：本地开发目录（link）
+dsh plugin --profile web add link:H:\GitHub\dsh-plugin\dsh-yuque-kb
+
+# 方式二：npm 发布后
+dsh plugin --profile web add dsh-yuque-kb
+
+# 方式三：tarball（pnpm pack 产物）
+dsh plugin --profile web add ./dsh-yuque-kb-0.1.0.tgz
 ```
+
+安装后**重启 dsh web**（插件加载进 GUI）：设置面板出现「知识库」页，
+聊天中模型可用 `kb_search` / `kb_read` / `kb_sync` / `kb_search_remote`。
+
+移除：`dsh plugin --profile web remove dsh-yuque-kb`。
 
 ## 合规与限制（Known Limitations）
 
