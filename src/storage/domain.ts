@@ -36,13 +36,19 @@ const globalSchema = z.object({
   lastSyncAt: z.number().nullable(),
   /** Last observed Yuque X-RateLimit-Remaining; `null` when unknown. */
   rateRemaining: z.number().nullable(),
+  /**
+   * Runtime credential set through `POST /api/dsh-yuque-kb/token` when no
+   * settings service is mounted (the settings namespace covers that path).
+   * Optional so media written before this field existed still open.
+   */
+  runtimeToken: z.string().nullish(),
 })
 
 /** Global sync-status slot type. */
 export type KbGlobal = z.infer<typeof globalSchema>
 
 /** Initial global value served before the first durable write. */
-export const KB_GLOBAL_INITIAL: KbGlobal = { lastSyncAt: null, rateRemaining: null }
+export const KB_GLOBAL_INITIAL: KbGlobal = { lastSyncAt: null, rateRemaining: null, runtimeToken: null }
 
 /** Branded key schema of the `repos` table (a `string` at runtime). */
 export const repoIdSchema = z.string().brand<'RepoId'>()

@@ -134,10 +134,25 @@ export interface KbIndex {
   removeDocs(docIds: readonly string[]): void
   /** Run a full-text search (see module docs for tokenizer specifics). */
   search(options: KbSearchOptions): KbSearchResult
+  /**
+   * Read one doc's indexed blocks in insertion order (`kb_read` local path).
+   * The synthetic `meta` row (title/path columns only) is excluded.
+   * @param docId - the doc to read.
+   * @returns block type + verbatim chunk text; `[]` for an unknown doc.
+   */
+  readDocBlocks(docId: string): ReadDocBlock[]
   /** Total indexed docs (meta rows). */
   countDocs(): number
   /** Close the underlying database; further calls throw. */
   close(): void
+}
+
+/** One block read back from the index, mirroring the `kb_read` block model. */
+export interface ReadDocBlock {
+  /** Structural chunk category (`heading`/`paragraph`/`code`/`table`). */
+  type: string
+  /** Verbatim chunk text. */
+  text: string
 }
 
 /**
@@ -529,6 +544,14 @@ class SqliteKbIndex implements KbIndex {
         snippet: makeSnippet(row.marked_text, tokens, KB_SNIPPET_CHARS),
       })),
     }
+  }
+
+  readDocBlocks(docId: string): ReadDocBlock[] {
+    const db = this.requireDb()
+    const rows = db.prepare(
+      'SELECT block_type, text FROM kb_fts WHERE doc_id = ? AND block_type != ? ORDER BY rowid',
+    ).all(docId, 'meta') as Array<{ block_type: string; text: string }>
+    return rows.map(row => ({ type: row.block_type, text: row.text }))
   }
 
   countDocs(): number {
