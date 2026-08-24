@@ -6,7 +6,8 @@ import type { RepoNode } from '../../src/client/types.ts'
 import { zh } from '../../src/client/locales.ts'
 
 const t = (key: keyof typeof zh, params?: Record<string, string | number>): string => {
-  let text = zh[key]
+  let text = zh[key] ?? ''
+
   if (params !== undefined) {
     for (const [name, value] of Object.entries(params)) text = text.replace(`{${name}}`, String(value))
   }
