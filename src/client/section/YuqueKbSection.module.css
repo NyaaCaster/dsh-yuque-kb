@@ -1,0 +1,135 @@
+.section {
+  font-family: var(--dsw-font-family, system-ui, sans-serif);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.block {
+  border: 1px solid var(--dsw-alias-border-inverted, rgba(127, 127, 127, 0.25));
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.label {
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary, #4c5057);
+  min-width: 96px;
+}
+
+.input {
+  flex: 1;
+  min-width: 180px;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-inverted, rgba(127, 127, 127, 0.3));
+  background: var(--dsw-specific-login-input, #f5f6f7);
+  color: var(--dsw-alias-label-primary, #1f2329);
+}
+
+.filterInput {
+  min-width: 140px;
+}
+
+.button {
+  font-size: 13px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  background: var(--dsw-alias-button-primary-dimmed, #e9edf5);
+  color: var(--dsw-alias-label-primary, #1f2329);
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ghostButton {
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--dsw-alias-border-inverted, rgba(127, 127, 127, 0.3));
+  cursor: pointer;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary, #4c5057);
+}
+
+.badge {
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover-solid, #e2e5ea);
+  color: var(--dsw-alias-label-tertiary, #8a8f99);
+}
+
+.badgeOk {
+  background: var(--dsw-alias-state-success-tertiary, #e2f3e7);
+  color: var(--dsw-alias-state-success-primary, #2f9e4f);
+}
+
+.statusText {
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary, #4c5057);
+}
+
+.testOk {
+  font-size: 13px;
+  color: var(--dsw-alias-state-success-primary, #2f9e4f);
+  margin: 0;
+}
+
+.testError {
+  font-size: 13px;
+  color: var(--dsw-alias-state-error-primary, #d93a3a);
+  margin: 0;
+}
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.progressLine {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--dsw-alias-interactive-bg-hover-solid, #e2e5ea);
+  overflow: hidden;
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  background: var(--dsw-alias-state-success-primary, #2f9e4f);
+  transition: width 0.3s ease;
+}
+
+.progressText {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary, #4c5057);
+}
+
+.progressErrors {
+  font-size: 12px;
+  color: var(--dsw-alias-state-error-primary, #d93a3a);
+}
+
+.empty {
+  font-size: 13px;
+  color: var(--dsw-alias-label-dimmed, #9aa0a8);
+  padding: 8px 0;
+  margin: 0;
+}

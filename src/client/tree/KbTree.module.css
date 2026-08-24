@@ -1,0 +1,149 @@
+.tree {
+  font-family: var(--dsw-font-family, system-ui, sans-serif);
+}
+
+.sectionList,
+.repoList,
+.groupList,
+.docList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sectionItem {
+  margin-bottom: 8px;
+}
+
+.sectionHeader {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary, #8a8f99);
+  padding: 4px 8px;
+}
+
+.repo {
+  border: 1px solid var(--dsw-alias-border-inverted, rgba(127, 127, 127, 0.25));
+  border-radius: 8px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+
+.repoRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.chevron {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary, #4c5057);
+  padding: 2px 4px;
+}
+
+.repoName {
+  flex: 1;
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repoMeta {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary, #8a8f99);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.newBadge {
+  color: var(--dsw-alias-state-warn-primary, #cf8c00);
+}
+
+.notSynced {
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary, #8a8f99);
+}
+
+.groupList {
+  padding: 0 8px 8px 10px;
+}
+
+.groupTitle {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary, #8a8f99);
+  padding: 4px 4px 2px;
+}
+
+.docRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 20px;
+}
+
+.docTitle {
+  flex: 1;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toggle {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  border-radius: 10px;
+  border: none;
+  background: var(--dsw-alias-interactive-bg-hover-solid, #d9dce1);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.toggleOn {
+  background: var(--dsw-alias-state-success-primary, #3fa65a);
+}
+
+.toggleSmall {
+  width: 28px;
+  height: 16px;
+}
+
+.toggleKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: left 0.15s ease;
+}
+
+.toggleSmall .toggleKnob {
+  width: 12px;
+  height: 12px;
+}
+
+.toggleOn .toggleKnob {
+  left: 18px;
+}
+
+.toggleSmall.toggleOn .toggleKnob {
+  left: 14px;
+}
+
+.empty {
+  color: var(--dsw-alias-label-dimmed, #9aa0a8);
+  font-size: 13px;
+  padding: 12px;
+  text-align: center;
+}
