@@ -114,9 +114,13 @@ export function YuqueKbSection(props: YuqueKbSectionProps): React.JSX.Element {
     setTesting(true)
     setTestLine(null)
     try {
-      // A freshly typed token is transiently offered on test before it is saved.
-      await api.writeToken(tokenInput.trim())
-      if (tokenInput.trim().length > 0) { setTokenInput('') }
+      // A freshly typed token is saved first; an empty input leaves the
+      // configured token untouched (POST /token rejects empty values).
+      const newlyTyped = tokenInput.trim()
+      if (newlyTyped.length > 0) {
+        await api.writeToken(newlyTyped)
+        setTokenInput('')
+      }
       const result: TestResult = await api.test()
       if (result.ok) {
         setTestLine({ kind: 'ok', text: t('testOk', { name: result.user.name, login: result.user.login, booksCount: result.user.booksCount }) })

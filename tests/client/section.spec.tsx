@@ -74,6 +74,8 @@ describe('YuqueKbSection', () => {
     await screen.findByText(zh.tokenConfigured)
     fireEvent.click(screen.getByText(zh.testButton))
     await waitFor(() => expect(api.test).toHaveBeenCalled())
+    // An empty input must not hit POST /token (it rejects empty values).
+    expect(api.writeToken).not.toHaveBeenCalled()
     expect(screen.getByText(/连接成功：Nyaa/)).toBeTruthy()
   })
 
