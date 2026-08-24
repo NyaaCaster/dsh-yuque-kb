@@ -47,7 +47,7 @@ export interface YuqueKbKey {
 declare const __zh__: YuqueKbKey
 
 export const zh: YuqueKbKey & Record<string, string> = {
-  nav: '知识库',
+  nav: '语雀知识库',
   tokenLabel: 'Access Token',
   tokenPlaceholder: '粘贴语雀个人 Token（超级会员权益）',
   tokenConfigured: '已配置',
@@ -86,7 +86,7 @@ export const zh: YuqueKbKey & Record<string, string> = {
 }
 
 export const en: YuqueKbKey & Record<string, string> = {
-  nav: 'Knowledge Base',
+  nav: 'Yuque Knowledge Base',
   tokenLabel: 'Access Token',
   tokenPlaceholder: 'Paste your Yuque personal token (super member)',
   tokenConfigured: 'Configured',
