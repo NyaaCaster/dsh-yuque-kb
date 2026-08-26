@@ -7,8 +7,6 @@
  * (P4) for the contracts.
  */
 
-import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import z from 'schemastery'
@@ -17,7 +15,6 @@ import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-tools'
 import { createEngine, type KbEngine } from './engine.ts'
-import { openIndex } from './storage/fts.ts'
 import { openDomain, type KbDomain } from './storage/domain.ts'
 import { makeRoutes } from './routes.ts'
 import { kbReadTool, kbSearchRemoteTool, kbSearchTool, kbSyncTool } from './tools.ts'
@@ -49,12 +46,10 @@ export interface Config {
   rateLimitPerSec?: number
   /** Default hit count of `kb_search` (1..20; default 8). */
   searchLimit?: number
-  /** Body chunk ceiling in code points for the FTS index (default 512). */
+  /** Body chunk ceiling in code points for `kb_read` paging (default 512). */
   blockCharLimit?: number
-  /** Timeout budget for remote-fetch tools (`kb_read` fallback, `kb_search_remote`; ms). */
+  /** Timeout budget for remote-fetch tools (`kb_read`, `kb_search_remote`; ms). */
   timeoutMs?: number
-  /** Override the FTS index database path (default `~/.dsh/dsh-yuque-kb/index.sqlite`). */
-  indexPath?: string
 }
 
 export const Config: z<Config> = z.object({
@@ -66,19 +61,13 @@ export const Config: z<Config> = z.object({
   searchLimit: z.number().default(8),
   blockCharLimit: z.number().default(512),
   timeoutMs: z.number().default(30000),
-  indexPath: z.string().default(''),
 })
-
-/** The FTS index database path when `indexPath` is unset. */
-function defaultIndexPath(): string {
-  return resolve(join(homedir(), '.dsh', 'dsh-yuque-kb', 'index.sqlite'))
-}
 
 /** Order of the announcement section within the tool-guidance band. */
 const SECTION_ORDER = 150
 
 /** Model-facing announcement: plugin presence, capabilities, triggers, limits. */
-export const KB_GUIDANCE = '本机已安装 dsh-yuque-kb 插件（语雀知识库）：kb_sync 增量同步语雀内容到本地索引、kb_search 离线检索本地已同步内容（不消耗语雀 API 额度）、kb_read 分块阅读文档正文、kb_search_remote 语雀云端搜索（未同步内容兜底，消耗 API 额度）。当用户提到「语雀/知识库/文档库/某篇已知文档」时：先 kb_search 本地检索；本地未命中再用 kb_search_remote；需要最新内容或首次使用前先 kb_sync。限制：本地索引是只读快照，同步范围与文档开关在管理设置里配置；未同步的文档 kb_read 会实时回源拉取。'
+export const KB_GUIDANCE = '本机已安装 dsh-yuque-kb 插件（语雀知识库）：kb_sync 增量同步语雀目录到本地、kb_search 按标题/路径检索本地目录（不消耗语雀 API 额度）、kb_read 在线分块阅读文档正文、kb_search_remote 语雀云端全文搜索（消耗 API 额度）。当用户提到「语雀/知识库/文档库/某篇已知文档」时：先 kb_search 本地检索；本地未命中再用 kb_search_remote；需要最新内容或首次使用前先 kb_sync。限制：本地只存目录快照（不存正文，避免语雀风控）；kb_read/kb_search_remote 实时回源语雀，消耗 API 额度；同步范围与文档开关在管理设置里配置。'
 
 /** Schema defaults re-read by hand-built test contexts (the loader applies them). */
 const DEFAULTS = {
@@ -90,7 +79,6 @@ const DEFAULTS = {
   searchLimit: 8,
   blockCharLimit: 512,
   timeoutMs: 30_000,
-  indexPath: '',
 }
 
 /** The effective live config (settings section first, schema defaults last). */
@@ -106,7 +94,6 @@ function resolveConfig(value: Config): ResolvedConfig {
     searchLimit: value.searchLimit ?? DEFAULTS.searchLimit,
     blockCharLimit: value.blockCharLimit ?? DEFAULTS.blockCharLimit,
     timeoutMs: value.timeoutMs ?? DEFAULTS.timeoutMs,
-    indexPath: value.indexPath ?? DEFAULTS.indexPath,
   }
 }
 
@@ -122,13 +109,9 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   const resolve = (): ResolvedConfig => resolveConfig(current())
 
   const domain: KbDomain = await openDomain(ctx)
-  const indexPath = resolve().indexPath !== '' ? resolve().indexPath : defaultIndexPath()
-  const index = await openIndex(indexPath)
-  ctx.effect(() => () => { index.close() }, 'yuque-kb: index')
 
   const engine: KbEngine = createEngine({
     domain,
-    index,
     config: () => ({
       yuqueToken: resolve().yuqueToken,
       rateLimitPerSec: resolve().rateLimitPerSec,

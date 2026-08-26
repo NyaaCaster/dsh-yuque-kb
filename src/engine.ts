@@ -1,11 +1,12 @@
 /**
- * KbEngine — the yuque-kb host capability. Ties the P2 Yuque adapter
- * (`src/yuque/`) to the P3 local store (`src/storage/`): incremental sync
- * pulls repo/doc catalogs and doc bodies into the FTS5 index plus the
- * storage domain, and the search/read/remote-search/status operations serve
- * both the `kb_*` tools and the `/api/dsh-yuque-kb` routes. Everything is
- * injectable (fetch/sleep/clock) so unit tests and the composition test run
- * against mocked Yuque HTTP.
+ * KbEngine — the yuque-kb host capability. Online-first: `kb_sync` only
+ * refreshes the repo/doc catalogue (toc + doc lists) into the storage
+ * domain — doc bodies are NEVER bulk-fetched, because sustained bursts of
+ * requests trip Yuque's short-window 429 风控 (实测 ~25 连发即触发, 数小时不解).
+ * `kb_read` fetches one doc body live on demand; `kb_search` matches the
+ * local catalogue's titles/paths only; `kb_search_remote` queries the Yuque
+ * cloud search API. Everything is injectable (fetch/sleep/clock) so unit
+ * tests and the composition test run against mocked Yuque HTTP.
  *
  * Token precedence: the settings namespace / composition `yuqueToken`
  * (checked first), then the runtime credential stored in the domain global
@@ -15,7 +16,6 @@
 import { chunkMarkdown } from './storage/chunk.ts'
 import type { DocRecord, DocId, KbDomain, RepoId, RepoRecord } from './storage/domain.ts'
 import { getDoc, getGlobal, getRepo, setDoc, setEnabled, setGlobal, setRepo } from './storage/domain.ts'
-import type { KbIndex, KbSearchResult } from './storage/fts.ts'
 import type { RateLimit, YuqueDocSummary, YuqueTocNode } from './yuque/types.ts'
 import type { YuqueClient } from './yuque/adapter.ts'
 import { createYuqueClient, YuqueApiError } from './yuque/adapter.ts'
@@ -36,8 +36,6 @@ export interface KbEngineConfig {
 export interface KbEngineOptions {
   /** Opened `yuque_kb` storage domain (owned by the caller's effect). */
   domain: KbDomain
-  /** Opened FTS5 index (owned by the caller's effect). */
-  index: KbIndex
   /** Live config thunk (settings section or composition entry). */
   config: () => KbEngineConfig
   /** Test seam: fetch implementation (default global fetch). */
@@ -52,11 +50,11 @@ export interface KbEngineOptions {
 export interface SyncProgress {
   /** The repo being processed (namespace). */
   repo: string
-  /** `toc` / `docs` / `body` — which stage is in flight. */
-  phase: 'toc' | 'docs' | 'body'
-  /** Docs fully processed in the `body` stage. */
+  /** `toc` / `docs` — which stage is in flight. */
+  phase: 'toc' | 'docs'
+  /** Repos processed so far. */
   done: number
-  /** Docs to fetch in the `body` stage. */
+  /** Total repos to process. */
   total: number
 }
 
@@ -72,7 +70,7 @@ export interface SyncError {
 
 /** Foreground sync outcome (the `kb_sync` foreground contract). */
 export interface SyncResult {
-  /** Docs whose body was re-indexed. */
+  /** Catalogue records written (added + updated). */
   synced: number
   /** Docs new on the remote side. */
   added: number
@@ -116,6 +114,22 @@ export interface TreeDoc {
   updatedAt: number
   /** `true` when the body is indexed (record has a non-empty format). */
   synced: boolean
+}
+
+/** One `kb_search` local-catalogue hit (title/path match only — online-first). */
+export interface KbSearchItem {
+  docId: string
+  title: string
+  path: string
+  repo: string
+  updatedAt: number
+}
+
+/** `kb_search` result — no snippets: bodies are not kept locally. */
+export interface KbSearchResult {
+  total: number
+  truncated: boolean
+  items: KbSearchItem[]
 }
 
 /** `GET /api/dsh-yuque-kb/status` payload. */
@@ -178,25 +192,6 @@ export interface SyncOptions {
   signal?: AbortSignal
 }
 
-/** Batch width for doc-body fetches inside one repo. */
-const BODY_BATCH = 4
-
-/** Parse a Yuque ISO timestamp to epoch ms; 0 when unparsable. */
-function parseEpoch(value: string | undefined): number {
-  if (value === undefined) return 0
-  const ms = Date.parse(value)
-  return Number.isNaN(ms) ? 0 : ms
-}
-
-/** Strip `<em>` (and other inline tags) from a Yuque search snippet. */
-export function stripHtmlTags(text: string): string {
-  return text
-    .replace(/<\/?em>/giu, '')
-    .replace(/<[^>]*>/gu, '')
-    .replace(/\s+/gu, ' ')
-    .trim()
-}
-
 /**
  * Build breadcrumb paths from a flat TOC: each DOC node gets its TITLE
  * ancestors joined by " / " (no TITLE ancestors → empty path).
@@ -219,6 +214,22 @@ export function buildDocPaths(toc: readonly YuqueTocNode[]): Map<string, string>
     paths.set(node.slug, crumbs.reverse().join(' / '))
   }
   return paths
+}
+
+/** Parse a Yuque ISO timestamp to epoch ms; 0 when unparsable. */
+function parseEpoch(value: string | undefined): number {
+  if (value === undefined) return 0
+  const ms = Date.parse(value)
+  return Number.isNaN(ms) ? 0 : ms
+}
+
+/** Strip `<em>` (and other inline tags) from a Yuque search snippet. */
+export function stripHtmlTags(text: string): string {
+  return text
+    .replace(/<\/?em>/giu, '')
+    .replace(/<[^>]*>/gu, '')
+    .replace(/\s+/gu, ' ')
+    .trim()
 }
 
 /** The engine surface shared by tools and routes. */
@@ -252,10 +263,9 @@ export interface KbEngine {
   rateRemaining(): number | null
 }
 
-/** Create the engine over an opened domain + index. */
+/** Create the engine over an opened domain (online-first; no local index). */
 export function createEngine(engineOptions: KbEngineOptions): KbEngine {
   const domain = engineOptions.domain
-  const index = engineOptions.index
   const fetchImpl = engineOptions.fetchImpl ?? globalThis.fetch
   const sleep = engineOptions.sleep ?? ((ms: number) => new Promise(resolve => setTimeout(resolve, ms)))
   const now = engineOptions.now ?? Date.now
@@ -474,78 +484,31 @@ export function createEngine(engineOptions: KbEngineOptions): KbEngine {
         counts.updated += updated.length
         counts.removed += removed.length
 
-        // Remove gone docs (domain + index in lockstep).
+        // Remove gone docs.
         for (const ref of removed) {
           const local = localRefs.find(candidate => candidate.slug === ref.slug)
           if (local === undefined) continue
-          index.removeDocs([local.docId])
           await domain.table('docs').delete(local.docId as DocId)
         }
 
-        // Body stage: fetch changed docs in bounded batches.
-        const changed = [...added, ...updated]
-        syncState = {
-          running: true,
-          progress: { repo: namespace, phase: 'body', done: 0, total: changed.length },
-        }
-        for (let offset = 0; offset < changed.length; offset += BODY_BATCH) {
-          const batch = changed.slice(offset, offset + BODY_BATCH)
-          await Promise.all(batch.map(async (ref) => {
-            const local = localRefs.find(candidate => candidate.slug === ref.slug)
-            try {
-              const { markdown, format } = await client.getDocMarkdown(namespace, ref.slug)
-              const chunks = chunkMarkdown(markdown, { maxChars: engineOptions.config().blockCharLimit })
-              const docId = local?.docId ?? String(remoteDocId(remoteDocs, ref.slug))
-              const updatedAt = parseEpoch(ref.updatedAt)
-              index.upsertDocs([{
-                docId: String(docId),
-                title: remoteDocTitle(remoteDocs, ref.slug),
-                path: paths.get(ref.slug) ?? '',
-                repo: namespace,
-                updatedAt,
-                body: markdown,
-              }])
-              const previous = getDoc(domain, docId as DocId)
-              await setDoc(domain, docId as DocId, {
-                repoId: namespace as RepoId,
-                slug: ref.slug,
-                title: remoteDocTitle(remoteDocs, ref.slug),
-                path: paths.get(ref.slug) ?? previous?.path ?? '',
-                enabled: previous?.enabled ?? true,
-                updatedAt,
-                wordCount: estimateWordCount(markdown),
-                blocks: chunks.length,
-                format: format !== '' ? format : 'markdown',
-              })
-              counts.synced += 1
-            } catch (error) {
-              // Added-but-failed docs stay as catalogue placeholders so the
-              // tree can show them as not synced; updated failures keep their
-              // previous record (the old body stays searchable).
-              errors.push({ repo: namespace, doc: ref.slug, message: describeError(error) })
-              if (local === undefined) {
-                const docId = String(remoteDocId(remoteDocs, ref.slug))
-                if (getDoc(domain, docId as DocId) === undefined) {
-                  await setDoc(domain, docId as DocId, {
-                    repoId: namespace as RepoId,
-                    slug: ref.slug,
-                    title: remoteDocTitle(remoteDocs, ref.slug),
-                    path: paths.get(ref.slug) ?? '',
-                    enabled: true,
-                    updatedAt: parseEpoch(ref.updatedAt),
-                    wordCount: 0,
-                    blocks: 0,
-                    format: '',
-                  })
-                }
-              }
-            } finally {
-              const progress = syncState.progress
-              if (progress !== undefined) {
-                syncState = { running: true, progress: { ...progress, done: progress.done + 1 } }
-              }
-            }
-          }))
+        // Online-first: catalogue records only — bodies are never bulk
+        // fetched (Yuque's short-window 风控 trips on sustained bursts).
+        for (const ref of [...added, ...updated]) {
+          const local = localRefs.find(candidate => candidate.slug === ref.slug)
+          const docId = local?.docId ?? String(remoteDocId(remoteDocs, ref.slug))
+          const previous = getDoc(domain, docId as DocId)
+          await setDoc(domain, docId as DocId, {
+            repoId: namespace as RepoId,
+            slug: ref.slug,
+            title: remoteDocTitle(remoteDocs, ref.slug),
+            path: paths.get(ref.slug) ?? previous?.path ?? '',
+            enabled: previous?.enabled ?? true,
+            updatedAt: parseEpoch(ref.updatedAt),
+            wordCount: 0,
+            blocks: 0,
+            format: '',
+          })
+          counts.synced += 1
         }
 
         const previousRepo = getRepo(domain, namespace as RepoId)
@@ -589,8 +552,8 @@ export function createEngine(engineOptions: KbEngineOptions): KbEngine {
           path: doc.path,
           enabled: doc.enabled,
           updatedAt: doc.updatedAt,
-          // Convention: a non-empty format marks an indexed body.
-          synced: doc.format !== '',
+          // Online-first: every catalogue record is readable on demand.
+          synced: true,
         })
       }
       docs.sort((left, right) => left.title.localeCompare(right.title))
@@ -627,17 +590,32 @@ export function createEngine(engineOptions: KbEngineOptions): KbEngine {
     }
   }
 
-  function search(query: string, limit?: number, repo?: string) {
-    const enabledIds = new Set<string>()
+  function search(query: string, limit?: number, repo?: string): KbSearchResult {
+    const needle = query.trim().toLowerCase()
+    if (needle === '') return { total: 0, truncated: false, items: [] }
+    const effectiveLimit = limit ?? engineOptions.config().searchLimit ?? 8
+    const items: KbSearchResult['items'] = []
     for (const [docId, record] of domain.table('docs').entries()) {
       if (!record.enabled) continue
       // Q2: a disabled repo excludes its docs regardless of the doc flag.
       const owner = getRepo(domain, record.repoId)
       if (owner !== undefined && !owner.enabled) continue
-      enabledIds.add(String(docId))
+      if (repo !== undefined && record.repoId !== repo) continue
+      const title = record.title.toLowerCase()
+      const path = record.path.toLowerCase()
+      const matchTitle = title.includes(needle)
+      const matchPath = path.includes(needle)
+      if (!matchTitle && !matchPath) continue
+      items.push({
+        docId: String(docId),
+        title: record.title,
+        path: record.path,
+        repo: record.repoId,
+        updatedAt: record.updatedAt,
+      })
+      if (items.length >= effectiveLimit) break
     }
-    const effectiveLimit = limit ?? engineOptions.config().searchLimit
-    return index.search({ query, limit: effectiveLimit, repo, enabledIds })
+    return { total: items.length, truncated: false, items }
   }
 
   async function read(
@@ -655,12 +633,13 @@ export function createEngine(engineOptions: KbEngineOptions): KbEngine {
     if (!record.enabled || (repo !== undefined && !repo.enabled)) {
       throw new Error(`doc ${docId} is disabled (enable it in the 知识库 tree to read)`)
     }
-    let blocks = index.readDocBlocks(String(docId))
-    if (blocks.length === 0) {
-      // Not indexed (catalogue placeholder): fetch the body live, temporarily.
-      if (repo === undefined) {
-        throw new Error(`doc ${docId}: owning repo ${record.repoId} is missing from the local store`)
-      }
+    let blocks: Array<{ type: string; text: string }>
+    if (repo === undefined) {
+      throw new Error(`doc ${docId}: owning repo ${record.repoId} is missing from the local store`)
+    }
+    {
+      // Online-first: fetch the body live on demand — bodies are never kept
+      // locally (Yuque 风控 makes bulk syncing unsafe).
       const client = makeClient(signal)
       const { markdown } = await client.getDocMarkdown(repo.namespace, record.slug)
       blocks = chunkMarkdown(markdown, { maxChars: engineOptions.config().blockCharLimit })
@@ -770,12 +749,4 @@ function remoteDocId(docs: readonly YuqueDocSummary[], slug: string): number {
 /** Resolve the doc title of one remote ref. */
 function remoteDocTitle(docs: readonly YuqueDocSummary[], slug: string): string {
   return docs.find(doc => doc.slug === slug)?.title ?? slug
-}
-
-/** Rough CJK-aware word count (CJK chars + whitespace-separated words). */
-function estimateWordCount(markdown: string): number {
-  const cjk = markdown.match(/[\u4E00-\u9FFF\u3400-\u4DBF]/gu)?.length ?? 0
-  const latin = markdown.replace(/[\u4E00-\u9FFF\u3400-\u4DBF]/gu, ' ').trim().split(/\s+/u)
-    .filter(token => token !== '').length
-  return cjk + latin
 }

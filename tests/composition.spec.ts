@@ -199,7 +199,6 @@ async function harness(config: Partial<Config> = {}): Promise<Harness> {
   await ctx.plugin(WebServer, { host: '127.0.0.1', port: 0 })
   const fiber = await ctx.plugin(YuqueKb, {
     rateLimitPerSec: 1000, // keep throttle slots ~1ms for fast tests
-    indexPath: join(dir, 'index.sqlite'),
     yuqueToken: 'test-token',
     ...config,
   })
@@ -327,26 +326,25 @@ describe('composition: kb_sync / kb_search / kb_read', () => {
     // Model-visible render.
     expect(textOf(syncResult)).toContain('synced 2 docs (added 2, updated 0, removed 0)')
 
-    // kb_search: 3+ char token through FTS MATCH, snippet around the hit.
-    const search = await runTool(h.ctx, 'kb_search', { query: 'alpha-beta', limit: 5 })
+    // kb_search: local catalogue matches by title/path (bodies are not kept).
+    const search = await runTool(h.ctx, 'kb_search', { query: 'Doc', limit: 5 })
     const searchValue = valueOf<{
       total: number; truncated: boolean
-      items: Array<{ docId: string; title: string; repo: string; snippet: string }>
+      items: Array<{ docId: string; title: string; repo: string }>
     }>(search)
-    expect(searchValue.total).toBe(1)
+    expect(searchValue.total).toBe(2)
     expect(searchValue.items[0]).toMatchObject({ docId: '11', title: 'Doc A', repo: 'me/book1' })
-    expect(searchValue.items[0]!.snippet).toContain('alpha-beta')
     const searchText = textOf(search)
-    expect(searchText).toContain('1 hits')
+    expect(searchText).toContain('2 hits')
     expect(searchText).toContain('[Doc A]')
 
-    // kb_search: 2-char CJK term falls back to instr sub-string matching.
-    const cjk = await runTool(h.ctx, 'kb_search', { query: '语雀' })
+    // kb_search: CJK title substring matching.
+    const cjk = await runTool(h.ctx, 'kb_search', { query: 'Doc' })
     const cjkValue = valueOf<{ total: number; items: Array<{ title: string }> }>(cjk)
     expect(cjkValue.total).toBe(2)
     expect(cjkValue.items.map(item => item.title).sort()).toEqual(['Doc A', 'Doc B'])
 
-    // kb_read: local blocks with cursor paging.
+    // kb_read: body fetched live (online-first), blocks with cursor paging.
     const read = await runTool(h.ctx, 'kb_read', { docId: '11', startBlock: 1, maxBlocks: 1 })
     const readValue = valueOf<{
       docId: string; title: string; repo: string; totalBlocks: number
@@ -386,7 +384,7 @@ describe('composition: kb_sync / kb_search / kb_read', () => {
     expect(toggle.status).toBe(200)
     expect(toggle.body).toEqual({ ok: true })
     const afterDoc = valueOf<{ total: number; items: Array<{ title: string }> }>(
-      await runTool(h.ctx, 'kb_search', { query: '语雀' }),
+      await runTool(h.ctx, 'kb_search', { query: 'Doc' }),
     )
     expect(afterDoc.items.map(item => item.title)).toEqual(['Doc B'])
     const blockedRead = await runTool(h.ctx, 'kb_read', { docId: '11' })
@@ -396,7 +394,7 @@ describe('composition: kb_sync / kb_search / kb_read', () => {
     // Repo-level disable excludes the whole library.
     await postJson(h, '/api/dsh-yuque-kb/toggle', { kind: 'doc', id: '11', enabled: true })
     await postJson(h, '/api/dsh-yuque-kb/toggle', { kind: 'repo', id: 'me/book1', enabled: false })
-    const afterRepo = valueOf<{ total: number }>(await runTool(h.ctx, 'kb_search', { query: '语雀' }))
+    const afterRepo = valueOf<{ total: number }>(await runTool(h.ctx, 'kb_search', { query: 'Doc' }))
     expect(afterRepo.total).toBe(0)
   })
 
@@ -501,15 +499,16 @@ describe('composition: /api routes', () => {
     expect(status.body).toMatchObject({ syncing: false, rateRemaining: 4900, errors: [] })
   })
 
-  it('catalogue placeholders show synced=false until a body sync', async () => {
+  it('catalogue refresh builds readable docs without touching bodies', async () => {
     const h = await harness({ yuqueToken: '' })
     await postJson(h, '/api/dsh-yuque-kb/token', { token: 'runtime-secret' })
-    // Refresh builds the catalogue without fetching bodies.
+    // Refresh builds the catalogue without fetching bodies (online-first).
     const tree = await getJson(h, '/api/dsh-yuque-kb/tree?refresh=true')
     const body = tree.body as { repos: Array<{ docs: Array<{ docId: string; synced: boolean }> }>; lastSyncAt: number | null }
     expect(tree.status).toBe(200)
     expect(body.lastSyncAt).toBeNull()
-    expect(body.repos[0]!.docs.every(doc => doc.synced === false)).toBe(true)
+    // Every catalogue record is readable on demand (synced=true, online-first).
+    expect(body.repos[0]!.docs.every(doc => doc.synced === true)).toBe(true)
     // Keeping lastSyncAt null: refresh is not a sync.
     const status = await getJson(h, '/api/dsh-yuque-kb/status')
     expect(status.body).toMatchObject({ lastSyncAt: null })
@@ -533,10 +532,9 @@ describe('composition: syncOnStartup', () => {
       const body = await status.json() as { lastSyncAt: number | null }
       return body.lastSyncAt !== null
     })
-    // And the search confirms the content is indexed.
-    const search = await runTool(h.ctx, 'kb_search', { query: '知识库使用' })
+    // And the search confirms the catalogue is populated (title match).
+    const search = await runTool(h.ctx, 'kb_search', { query: 'Doc' })
     const value = valueOf<{ total: number; items: Array<{ title: string }> }>(search)
-    expect(value.total).toBe(1)
-    expect(value.items[0]!.title).toBe('Doc B')
+    expect(value.total).toBe(2)
   })
 })

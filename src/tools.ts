@@ -52,10 +52,11 @@ export function renderSyncResult(value: SyncResult): string {
 }
 
 /** One kb_search hit line. */
-function renderHit(item: { title: string; path: string; repo: string; updatedAt: number; snippet: string }, index: number): string {
+function renderHit(item: { title: string; path: string; repo: string; updatedAt: number; snippet?: string }, index: number): string {
   const location = item.path !== '' ? `${item.repo}/${item.path}` : item.repo
   const when = item.updatedAt > 0 ? new Date(item.updatedAt).toISOString().slice(0, 10) : 'unknown'
-  return `${index + 1}. [${item.title}] (${location}, updated ${when})\n   ${item.snippet}`
+  const snippetLine = item.snippet !== undefined && item.snippet !== '' ? `\n   ${item.snippet}` : ''
+  return `${index + 1}. [${item.title}] (${location}, updated ${when})${snippetLine}`
 }
 
 /** `kb_sync`: foreground + background (ctx.jobs, tool-bash pattern). */
@@ -169,16 +170,16 @@ export function kbSyncTool(ctx: Context, engine: KbEngine): ToolDefinition {
   })
 }
 
-/** `kb_search`: local FTS5 over enabled docs (enabled-filtered, honest truncation). */
+/** `kb_search`: local catalogue title/path search (enabled-filtered, zero quota). */
 export function kbSearchTool(engine: KbEngine, config: () => KbEngineConfig): ToolDefinition {
   return defineTool({
     name: 'kb_search',
-    description: 'Search the locally synced Yuque knowledge base (offline FTS index — no API quota consumed). '
-      + 'CJK: terms of 3+ characters match substrings; shorter terms match as substrings too. '
-      + 'Returns hits with title, path, update date and a snippet. '
-      + 'Use when the user asks about content that may live in a synced Yuque knowledge base; if nothing matches, try kb_search_remote (cloud).',
+    description: 'Search the locally synced Yuque catalogue by title and path (no API quota consumed). '
+      + 'Returns hits with docId, title, path, repo and update date — no snippet (bodies are not stored locally, '
+      + 'online-first; use kb_read to fetch the body of a hit). '
+      + 'Use first when the user asks about content that may live in a Yuque knowledge base; if nothing matches, try kb_search_remote (cloud full-text).',
     parameters: {
-      query: { type: 'string', required: true, description: 'The search query (keywords).' },
+      query: { type: 'string', required: true, description: 'Keywords matched against doc titles and paths (case-insensitive substring).' },
       limit: { type: 'integer', description: 'Max hits (1..20; default 8).' },
       repo: { type: 'string', description: 'Restrict to one repo namespace (e.g. `login/slug`).' },
     },
@@ -201,7 +202,6 @@ export function kbSearchTool(engine: KbEngine, config: () => KbEngineConfig): To
                 path: { type: 'string', required: true },
                 repo: { type: 'string', required: true },
                 updatedAt: { type: 'integer', required: true },
-                snippet: { type: 'string', required: true },
               },
             },
           },
@@ -227,15 +227,14 @@ export function kbSearchTool(engine: KbEngine, config: () => KbEngineConfig): To
       return { card: 'generic', title: `kb_search: ${query}`, kind: 'search' }
     },
     presentResult: (_args, result): SearchResultView => {
-      const value = result.meta as { total: number; truncated: boolean; items: Array<{ title: string; repo: string; path: string; snippet: string }> } | undefined
+      const value = result.meta as { total: number; truncated: boolean; items: Array<{ title: string; repo: string; path: string }> } | undefined
       if (value === undefined) return { card: 'search', shape: 'paths', paths: [], truncated: false, total: 0 }
       return {
         card: 'search',
-        shape: 'matches',
-        files: value.items.map(item => {
+        shape: 'paths',
+        paths: value.items.map(item => {
           const location = item.path !== '' ? `${item.repo}/${item.path}` : item.repo
-          const matches = [{ lineNumber: 1, line: item.snippet }]
-          return { path: `${item.title} — ${location}`, matches }
+          return `${item.title} — ${location}`
         }),
         truncated: value.truncated,
         total: value.total,
@@ -247,20 +246,21 @@ export function kbSearchTool(engine: KbEngine, config: () => KbEngineConfig): To
   })
 }
 
-/** Render kb_search / kb_search_remote hit lists. */
-function renderSearchResult(value: { total: number; truncated: boolean; items: Array<{ title: string; path: string; repo: string; updatedAt: number; snippet: string }> }): string {
+/** Render kb_search hit lists (local catalogue: no snippets). */
+function renderSearchResult(value: { total: number; truncated: boolean; items: Array<{ title: string; path: string; repo: string; updatedAt: number }> }): string {
   if (value.items.length === 0) return `no hits (total ${value.total})`
   const lines = [`${value.total} hits${value.truncated ? ' (truncated)' : ''}:`]
   value.items.forEach((item, index) => lines.push(renderHit(item, index)))
   return lines.join('\n')
 }
 
-/** `kb_read`: block-paged body read; live fetch fallback for not-yet-synced docs. */
+/** `kb_read`: block-paged body read, fetched live from Yuque on demand. */
 export function kbReadTool(engine: KbEngine, config: () => KbEngineConfig): ToolDefinition {
   return defineTool({
     name: 'kb_read',
-    description: 'Read the body of one Yuque knowledge-base doc in blocks (from the local index; a doc that is not synced yet is fetched live from Yuque, consuming API quota). '
-      + 'Read in windows with startBlock/maxBlocks and continue with nextCursor. docId comes from kb_search / kb_search_remote / the 知识库 tree.',
+    description: 'Read the body of one Yuque knowledge-base doc in blocks (fetched live from Yuque, consuming API quota; '
+      + 'bodies are not stored locally — online-first). '
+      + 'Read in windows with startBlock/maxBlocks and continue with nextCursor. docId comes from kb_search / kb_search_remote / the 语雀知识库 tree.',
     parameters: {
       docId: { type: 'string', required: true, description: 'The doc id from kb_search / kb_search_remote / the 知识库 tree.' },
       startBlock: { type: 'integer', description: 'First block to read (0-based; default 0).' },
