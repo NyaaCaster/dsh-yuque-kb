@@ -6,7 +6,7 @@
  * - settings-backed token via POST /token (secret, never echoed)
  * - everything else through the /api/dsh-yuque-kb routes (immediate effect)
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { KbApi } from '../api.ts'
 import type { StatusPayload, TestResult, TreePayload } from '../types.ts'
 import type { YuqueKbKey } from '../locales.ts'
@@ -29,7 +29,35 @@ function formatTime(ts: number): string {
 }
 
 /**
- * The 知识库 settings section.
+ * Renders one fallback when the section body throws — a render error must
+ * never take the whole settings panel (or web shell) down: show the message
+ * and surface it on the console instead.
+ */
+class SectionErrorBoundary extends Component<{ t: YuqueKbSectionProps['t']; children: ReactNode }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null }
+
+  static getDerivedStateFromError(error: Error): { error: Error } {
+    return { error }
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    console.error('[dsh-yuque-kb] section render failed:', error, info)
+  }
+
+  render(): ReactNode {
+    if (this.state.error !== null) {
+      return (
+        <p className={css.testError} role="alert">
+          {this.props.t('genericError', { message: this.state.error.message })}
+        </p>
+      )
+    }
+    return this.props.children
+  }
+}
+
+/**
+ * The 语雀知识库 settings section.
  * @param props - api + copy from the registration inject face.
  */
 export function YuqueKbSection(props: YuqueKbSectionProps): React.JSX.Element {
@@ -192,7 +220,8 @@ export function YuqueKbSection(props: YuqueKbSectionProps): React.JSX.Element {
     : tree.repos.reduce((sum, repo) => sum + repo.docs.length, 0)
 
   return (
-    <div className={css.section}>
+    <SectionErrorBoundary t={t}>
+      <div className={css.section}>
       {/* ① Connection: token + test. */}
       <div className={css.block}>
         <div className={css.row}>
@@ -275,7 +304,7 @@ export function YuqueKbSection(props: YuqueKbSectionProps): React.JSX.Element {
                 {' '}
                 {t('syncProgressDone', { done: progress.done, total: progress.total })}
               </span>
-              {progress.errors.length > 0
+              {progress.errors !== undefined && progress.errors.length > 0
                 ? <span className={css.progressErrors}>{t('syncProgressErrors', { n: progress.errors.length })}</span>
                 : null}
             </div>
@@ -313,6 +342,7 @@ export function YuqueKbSection(props: YuqueKbSectionProps): React.JSX.Element {
           : <p className={css.empty}>{t('neverSynced')}</p>}
         {toggling ? null : null}
       </div>
-    </div>
+      </div>
+    </SectionErrorBoundary>
   )
 }

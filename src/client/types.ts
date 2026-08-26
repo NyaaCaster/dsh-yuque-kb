@@ -65,7 +65,8 @@ export interface SyncProgress {
   repo?: string
   done: number
   total: number
-  errors: string[]
+  /** Non-fatal failures so far (absent when the host does not send it). */
+  errors?: string[]
 }
 
 /** Result of GET /status. */
