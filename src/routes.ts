@@ -167,16 +167,18 @@ export function makeRoutes(deps: KbRoutesDeps): WebRoute[] {
           const repos = Array.isArray(body?.repos)
             ? (body.repos as unknown[]).filter((entry): entry is string => typeof entry === 'string')
             : undefined
-          // Prefer the background registry when mounted; otherwise run the
-          // sync inline (the request blocks until it settles).
+          // Prefer the background registry when mounted, and degrade to an
+          // inline foreground run when the registry rejects the request
+          // (unserved owner, limit reached) — a UI-triggered sync must not
+          // die with an opaque 400. The response states which path ran.
           const jobs = ctx.get('jobs') as KbJobRegistry | undefined
           if (jobs !== undefined) {
             const controller = new AbortController()
-            const id = jobs.start({
+            const spec = {
               kind: 'kb-sync',
               label: 'sync yuque kb (web)',
-              run: () => {
-                const done = engine.sync({ repos, signal: controller.signal })
+              run: (): { done: Promise<{ status: 'completed' | 'killed' | 'failed'; detail?: string; output?: string }>; cancel: (reason?: string) => void } => ({
+                done: engine.sync({ repos, signal: controller.signal })
                   .then(result => ({
                     status: 'completed' as const,
                     detail: `synced ${result.synced} docs, ${result.errors.length} errors`,
@@ -186,12 +188,21 @@ export function makeRoutes(deps: KbRoutesDeps): WebRoute[] {
                     status: 'failed' as const,
                     detail: error instanceof Error ? error.message : String(error),
                     output: '',
-                  }))
-                return { cancel: () => controller.abort(), done }
-              },
-            })
-            writeJson(res, 200, { ok: true, jobId: id })
-            return
+                  })),
+                cancel: (reason?: string) => controller.abort(reason),
+              }),
+            }
+            try {
+              const id = jobs.start(spec)
+              writeJson(res, 200, { ok: true, jobId: id })
+              return
+            } catch (error) {
+              // Registry rejected the start (e.g. no controller serves an
+              // unowned job in this composition): fall through to inline.
+              deps.ctx.logger.warn(
+                `[dsh-yuque-kb] background job rejected, running sync inline: ${error instanceof Error ? error.message : String(error)}`,
+              )
+            }
           }
           try {
             await engine.sync({ repos })
