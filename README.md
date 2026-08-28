@@ -3,7 +3,7 @@
 把语雀（yuque.com）文档接入 dsh（DeepSeek Harness）作为模型知识库的插件（**在线优先**）。
 
 - 增量同步个人知识库**目录快照**到本地（toc 树 + 文档清单，仅 ~17 请求，安全）；**正文不落本地**（实测语雀对连续大量抓取触发短窗风控，在线读取规避）
-- 模型工具：`kb_sync`（目录增量同步，支持后台任务）/ `kb_search`（本地目录标题/路径检索，不耗语雀额度）/ `kb_read`（在线分块读正文，1-2 请求/篇）/ `kb_search_remote`（语雀云端全文搜索兜底）
+- **被动注入**：对话内容与语雀文档相关时自动检索并注入文档片段（外部记忆，无需点名）；也可显式使用工具 `kb_sync`（目录增量同步）/ `kb_search`（本地目录标题/路径检索，零额度）/ `kb_read`（在线分块读正文）/ `kb_search_remote`（语雀云端全文搜索）
 - `systemPrompt` 公告段（order 150，`announceToAgent` 可关）
 - `/api/dsh-yuque-kb/*` 路由族（loopback 信任栅栏）：`test` / `tree` / `toggle` / `sync` / `status` / `token`
 - 设置面板独立页「语雀知识库」（P5）：Token 配置、连接测试、同步状态、树形目录开关、立即同步、进度展示
@@ -24,6 +24,10 @@ V0.1 开发中，按 `.ref/开发计划-SSOT.md` 分阶段推进（P1–P5 完�
 | `searchLimit` | number | `8` | `kb_search` 默认命中数（1..20） |
 | `blockCharLimit` | number | `512` | `kb_read` 分块字符上限 |
 | `timeoutMs` | number | `30000` | 远程抓取类工具（`kb_read`、`kb_search_remote`）超时预算 |
+| `autoInject` | boolean | `true` | **被动注入**：对话回合自动检索语雀目录并把相关文档片段注入请求（无需点名插件/文档） |
+| `autoInjectRemote` | boolean | `true` | 被动注入本地未命中时回退语雀云端全文搜索（每次探测 1 请求） |
+| `autoInjectIntervalMs` | number | `30000` | 单会话内被动注入的最小间隔 |
+| `autoInjectMinQueryChars` | number | `8` | 触发被动探测的最短用户消息长度 |
 
 Token 解析优先级：设置文档/组合配置的 `yuqueToken` → `POST /api/dsh-yuque-kb/token` 存入的领域全局运行期凭据（无设置服务部署时的降级路径，见下）。
 
