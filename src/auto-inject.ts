@@ -86,12 +86,12 @@ function latestUserText(agent: Agent, proposed: readonly { content?: unknown }[]
 }
 
 /** Render the injected fragment for one local read. */
-function renderLocalInjection(record: { title: string; repo: string; path: string; blocks: string[] }): string {
+function renderLocalInjection(record: { docId: string; title: string; repo: string; path: string; totalBlocks: number; blocks: string[] }): string {
   const location = record.path !== '' && record.path !== undefined
     ? `${record.repo}/${record.path}`
     : record.repo
   const body = record.blocks.join('\n\n').slice(0, MAX_INJECT_CHARS)
-  return `[${AUTO_SECTION}] 检测到当前对话与你的语雀文档相关，已自动检索以下内容（回答时可直接引用并注明出处「语雀：《${record.title}》」）：\n来源：${location}\n\n${body}`
+  return `[${AUTO_SECTION}] 检测到当前对话与你的语雀文档相关，已自动检索以下内容（回答时可直接引用并注明出处「语雀：《${record.title}》」）：\n来源：${location}\n\n${body}\n\n（该文档共 ${record.totalBlocks} 块，以上为相关片段；如需阅读其余部分请调用 kb_read（docId=${record.docId}）继续）`
 }
 
 /** Render the injected fragment for a cloud hit (summary-level). */
@@ -128,16 +128,26 @@ export async function tryAutoInjection(
 ): Promise<string | undefined> {
   const tokens = extractQueryTokens(query)
   if (tokens.length === 0) return undefined
+  // CJK 2-char shingles of every CJK token — substring matching misses
+  // keyword-in-sentence queries ("的兑换码各档性价比" never matches a title).
+  const grams = new Set<string>()
+  for (const token of tokens) {
+    for (let index = 0; index + 2 <= token.length; index++) {
+      const gram = token.slice(index, index + 2)
+      if (/[\u4E00-\u9FFF\u3400-\u4DBF]{2}/u.test(gram)) grams.add(gram)
+    }
+  }
+  const probes = [...new Set([...tokens, ...grams])].slice(0, 10)
 
   // 1) Local catalogue (title/path), zero quota.
   const hits = new Map<string, LocalHit>()
-  for (const token of tokens.slice(0, 6)) {
+  for (const probe of probes) {
     if (signal?.aborted === true) return undefined
-    const result = engine.search(token, 8)
+    const result = engine.search(probe, 8)
     for (const item of result.items) {
       const previous = hits.get(item.docId)
-      const titleHit = item.title.toLowerCase().includes(token)
-      const pathHit = item.path.toLowerCase().includes(token)
+      const titleHit = item.title.toLowerCase().includes(probe)
+      const pathHit = item.path.toLowerCase().includes(probe)
       hits.set(item.docId, {
         docId: item.docId,
         title: item.title,
@@ -151,13 +161,21 @@ export async function tryAutoInjection(
   if (best !== undefined && best.score > 0) {
     if (signal?.aborted === true) return undefined
     try {
-      const read = await engine.read(best.docId, 0, 4, signal)
+      const read = await engine.read(best.docId, 0, 6, signal)
       if (read.totalBlocks === 0) return undefined
+      // Prefer blocks that carry the query shingles so the injected window
+      // covers the relevant part of a long document, not just its head.
+      const needle = new Set(grams)
+      const weight = (text: string): number =>
+        [...needle].filter(gram => text.includes(gram)).length
+      const blocks = [...read.blocks].sort((left, right) => weight(right.text) - weight(left.text))
       return renderLocalInjection({
+        docId: read.docId,
         title: read.title,
         repo: read.repo,
         path: best.path,
-        blocks: read.blocks.map(block => block.text),
+        totalBlocks: read.totalBlocks,
+        blocks: blocks.map(block => block.text),
       })
     } catch {
       return undefined // 429 / transient: stay silent.
