@@ -1,7 +1,7 @@
 {
   "name": "dsh-yuque-kb",
   "version": "0.1.0",
-  "description": "Yuque (yuque.com) knowledge base for dsh: sync personal/team docs into a local FTS5 index the model can search (kb_sync / kb_search / kb_read / kb_search_remote), with a dedicated 设置→知识库 management page.",
+  "description": "把语雀文档作为 dsh 的外部记忆：对话中自动检索并注入相关文档片段（无需点名），支持目录快照检索、云端全文搜索与在线阅读。",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -40,6 +40,9 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.1",
@@ -85,6 +88,7 @@
     "test:watch": "vitest"
   },
   "license": "AGPL-3.0",
+  "author": "NyaaCaster",
   "homepage": "https://github.com/NyaaCaster/dsh-yuque-kb",
   "repository": {
     "type": "git",
