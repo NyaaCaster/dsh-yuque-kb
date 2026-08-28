@@ -22,7 +22,7 @@
 ## 安装
 
 > [!NOTE]
-> 使用前请确保已安装 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`dsh` CLI）。
+> 使用前请确保已安装 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)。
 
 ```sh
 # 标准方式：从 npm 安装到 web profile
