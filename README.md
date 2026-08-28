@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/dsh-yuque-kb"><img src="https://img.shields.io/npm/v/dsh-yuque-kb?style=flat-square&color=5B4CF0" alt="npm 版本"></a>
-  <a href="https://github.com/NyaaCaster/dsh-yuque-kb/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-0B7285?style=flat-square" alt="Apache-2.0 许可证"></a>
+  <a href="https://github.com/NyaaCaster/dsh-yuque-kb/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-0B7285?style=flat-square" alt="AGPL-3.0 许可证"></a>
 </p>
 
 `dsh-yuque-kb` 把你在语雀（yuque.com）里的个人知识库接入 DeepSeek Harness：当对话内容与你的语雀文档相关时，插件会在**当前回合自动检索**并把相关文档片段送进对话（消息标注 `[yuque-kb-auto]`，回答自带出处「语雀：《标题》」）；你也可以随时显式点名搜索、阅读某篇文档。
@@ -133,4 +133,4 @@ dsh plugin --profile web add ./dsh-yuque-kb-0.1.0.tgz     # tarball
 
 ## 许可证
 
-[Apache-2.0](./LICENSE)
+[AGPL-3.0](./LICENSE)

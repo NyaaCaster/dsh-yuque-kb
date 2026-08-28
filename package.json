@@ -84,10 +84,14 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
-  "license": "Apache-2.0",
+  "license": "AGPL-3.0",
+  "homepage": "https://github.com/NyaaCaster/dsh-yuque-kb",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/NyaaCaster/dsh-yuque-kb.git"
+  },
+  "bugs": {
+    "url": "https://github.com/NyaaCaster/dsh-yuque-kb/issues"
   },
   "keywords": [
     "deepseek-harness",
