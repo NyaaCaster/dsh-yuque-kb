@@ -1,6 +1,6 @@
 {
   "name": "dsh-yuque-kb",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "把语雀文档作为 dsh 的外部记忆：对话中自动检索并注入相关文档片段（无需点名），支持目录快照检索、云端全文搜索与在线阅读。",
   "type": "module",
   "main": "lib/index.js",
