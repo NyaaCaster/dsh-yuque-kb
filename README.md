@@ -1,70 +1,136 @@
-# dsh-yuque-kb
+# dsh-yuque-kb — 把语雀文档变成你的外部记忆
 
-把语雀（yuque.com）文档接入 dsh（DeepSeek Harness）作为模型知识库的插件（**在线优先**）。
+<p align="center">
+  <b>对话时自动检索你的语雀文档并注入相关内容 —— 你不需要记得自己写过什么，也不需要点名任何插件。</b>
+</p>
 
-- 增量同步个人知识库**目录快照**到本地（toc 树 + 文档清单，仅 ~17 请求，安全）；**正文不落本地**（实测语雀对连续大量抓取触发短窗风控，在线读取规避）
-- **被动注入**：对话内容与语雀文档相关时自动检索并注入文档片段（外部记忆，无需点名）；也可显式使用工具 `kb_sync`（目录增量同步）/ `kb_search`（本地目录标题/路径检索，零额度）/ `kb_read`（在线分块读正文）/ `kb_search_remote`（语雀云端全文搜索）
-- `systemPrompt` 公告段（order 150，`announceToAgent` 可关）
-- `/api/dsh-yuque-kb/*` 路由族（loopback 信任栅栏）：`test` / `tree` / `toggle` / `sync` / `status` / `token`
-- 设置面板独立页「语雀知识库」（P5）：Token 配置、连接测试、同步状态、树形目录开关、立即同步、进度展示
+<p align="center">
+  <a href="https://www.npmjs.com/package/dsh-yuque-kb"><img src="https://img.shields.io/npm/v/dsh-yuque-kb?style=flat-square&color=5B4CF0" alt="npm 版本"></a>
+  <a href="https://github.com/NyaaCaster/dsh-yuque-kb/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-0B7285?style=flat-square" alt="Apache-2.0 许可证"></a>
+</p>
 
-## 状态
+`dsh-yuque-kb` 把你在语雀（yuque.com）里的个人知识库接入 DeepSeek Harness：当对话内容与你的语雀文档相关时，插件会在**当前回合自动检索**并把相关文档片段送进对话（消息标注 `[yuque-kb-auto]`，回答自带出处「语雀：《标题》」）；你也可以随时显式点名搜索、阅读某篇文档。
 
-V0.1 开发中，按 `.ref/开发计划-SSOT.md` 分阶段推进（P1–P5 完成；P6 集成验证中；2026-08-26 拍板**在线优先**：否决本地正文库）。
-
-## 配置（cordis.yml / 设置面板「语雀知识库」）
-
-| 键 | 类型 | 默认 | 说明 |
-|---|---|---|---|
-| `enabled` | boolean | `true` | 插件总开关（路由/工具/公告段） |
-| `announceToAgent` | boolean | `true` | 是否向模型公告本插件能力 |
-| `syncOnStartup` | boolean | `false` | 启动时自动增量同步目录（仅 token 已配置时） |
-| `yuqueToken` | string (secret) | `''` | 语雀 token；`role('secret')`，任何响应不回显 |
-| `rateLimitPerSec` | number | `3` | 语雀客户端节流（合规：5000 次/小时共享额度） |
-| `searchLimit` | number | `8` | `kb_search` 默认命中数（1..20） |
-| `blockCharLimit` | number | `512` | `kb_read` 分块字符上限 |
-| `timeoutMs` | number | `30000` | 远程抓取类工具（`kb_read`、`kb_search_remote`）超时预算 |
-| `autoInject` | boolean | `true` | **被动注入**：对话回合自动检索语雀目录并把相关文档片段注入请求（无需点名插件/文档） |
-| `autoInjectRemote` | boolean | `true` | 被动注入本地未命中时回退语雀云端全文搜索（每次探测 1 请求） |
-| `autoInjectIntervalMs` | number | `30000` | 单会话内被动注入的最小间隔 |
-| `autoInjectMinQueryChars` | number | `8` | 触发被动探测的最短用户消息长度 |
-
-Token 解析优先级：设置文档/组合配置的 `yuqueToken` → `POST /api/dsh-yuque-kb/token` 存入的领域全局运行期凭据（无设置服务部署时的降级路径，见下）。
-
-## 开发
-
-```sh
-pnpm install
-pnpm run typecheck
-pnpm run build      # tsc + tsdown（宿主 ESM + 浏览器 closure-factory bundle）
-pnpm run test       # vitest（含真实组合测试 tests/composition.spec.ts）
-```
+| 能力 | 带来的变化 |
+| --- | --- |
+| **被动注入（外部记忆）** | 用户不需要知道/想起自己有对应文档 —— 对话内容触发关键词即自动检索并注入片段，回答可引用并标出处 |
+| **树形目录管理** | 设置面板「语雀知识库」页展示全部知识库与文档层级，每个库/每篇文档独立开关，禁用即刻生效 |
+| **目录快照零额度检索** | `kb_search` 按标题/路径检索本地目录快照（不消耗语雀 API 额度） |
+| **在线全文兜底** | `kb_search_remote` 云端全文搜索 + `kb_read` 在线分块读正文 —— 永远最新，未同步的新文档也能读到 |
+| **安全合规** | 只读语雀、增量目录同步约 17 个请求、正文按需在线读取 —— 实测规避语雀短窗风控 |
 
 ## 安装
 
+> [!NOTE]
+> 使用前请确保已安装 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（`dsh` CLI）。
+
 ```sh
-# 方式一：本地开发目录（link）
-dsh plugin --profile web add link:H:\GitHub\dsh-plugin\dsh-yuque-kb
-
-# 方式二：npm 发布后
+# 标准方式：从 npm 安装到 web profile
 dsh plugin --profile web add dsh-yuque-kb
-
-# 方式三：tarball（pnpm pack 产物）
-dsh plugin --profile web add ./dsh-yuque-kb-0.1.0.tgz
 ```
 
-安装后**重启 dsh web**（插件加载进 GUI）：设置面板出现「知识库」页，
-聊天中模型可用 `kb_search` / `kb_read` / `kb_sync` / `kb_search_remote`。
+检查组合配置无误后，**重启 dsh web** 并在浏览器**硬刷新**（Ctrl+Shift+R）：
 
-移除：`dsh plugin --profile web remove dsh-yuque-kb`。
+```sh
+dsh --profile web --dump-config   # 应看到 dsh-yuque-kb 层
+```
 
-## 合规与限制（Known Limitations）
+从源码开发时也可以直接链接本地目录、或安装打包产物：
 
-- 语雀开放 API 仅用于正常读写：插件只读、目录同步 + 在线读取、默认 3 req/s 节流、429 退避、详情偶发 404 有限重试。
-- **风控实测**：语雀对连续大量抓取有短窗风控（~25 连发即 429、无 Retry-After、数小时不解）→ **正文不落本地**，`kb_read`/`kb_search_remote` 按需在线读取（每篇 1-2 请求，日常使用安全）；目录同步仅 ~17 请求。
-- Token 为超级会员权益；secret 字段经 `role('secret')` 存储，不随任何响应回显。
-- `kb_search_remote` 缺省 scope 是**客户端过滤近似**（按结果 URL 首段过滤到个人知识库），非语雀服务端 scope 限制；显式 `scope` 参数原样透传（库 namespace）。
-- `kb_search` 只检索本地目录的**标题/路径**（无正文本地副本、无 snippet）；全文内容请用 `kb_search_remote` + `kb_read`。
-- 后台任务（`kb_sync` 后台 / `/api/.../sync` jobId）依赖宿主装配 `@deepseek-ai/dsh-jobs`；未装配或注册被拒时 `/sync` 路由降级为前台同步。
-- 图片以 URL 引用保留；私有图直链鉴权未支持（V2 评估）。
-- 本地只存目录快照（repos/tocs/docs 元数据与开关）；正文不落盘（在线优先，见上）。
+```sh
+dsh plugin --profile web add link:/path/to/dsh-yuque-kb   # 本地开发目录
+dsh plugin --profile web add ./dsh-yuque-kb-0.1.0.tgz     # tarball
+```
+
+## 第一步：获取语雀 Token
+
+语雀开放 API 使用个人 Token 鉴权：
+
+1. 登录语雀（电脑网页版），点击右上角**头像 → 个人设置**（或直接打开 [https://www.yuque.com/settings/tokens](https://www.yuque.com/settings/tokens)）
+2. 在「Token」页面点击**生成 Token**，复制生成的一串字符
+3. Token 是机密凭据，只粘贴到下面设置的输入框，不要发到任何聊天/仓库里
+
+> [!IMPORTANT]
+> 个人 Token 属于**语雀超级会员**权益；如果你的账号无法生成 Token，需要先开通超级会员。
+> Token 代表你账号在该知识库上的全部权限（本插件只做只读操作，但 Token 本身请妥善保管）。
+
+## 第二步：在设置页配置并连接
+
+1. 打开 dsh web 设置面板，左侧导航点击 **「语雀知识库」**（在「插件/模型」等条目的附近，以你安装时的排序为准）
+2. 在**连接区**：把 Token 粘贴进 **Access Token** 输入框 → 点击**保存**（输入框是密码框，保存后不显示明文，只会显示「已配置」徽章）
+3. 点击 **连接测试** —— 成功后会显示：`连接成功：你的语雀昵称（登录名），知识库 N 个`；失败会给出原因（Token 无效 / 语雀临时限流等）
+
+## 第三步：同步目录并开始对话
+
+1. 在**同步状态区**点击 **立即同步**（首次约十几秒：拉取全部知识库的目录树与文档清单；之后每次同步只做增量，通常几秒完成）
+2. 同步区会显示：上次同步时间、语雀剩余额度、已索引文档总数；同步中显示进度条与当前库
+3. 回到聊天窗口，正常提问即可 —— 涉及你的语雀文档内容时，插件会自动注入相关片段，例如：
+
+> 我想知道 qinyapi 的兑换码各档性价比
+
+模型会先收到自动检索注入的文档片段（标注 `[yuque-kb-auto]` 与出处），据此作答；若片段不足以回答，模型会继续调用 `kb_read` 读完整文档。
+
+## 设置页使用说明（界面一览）
+
+「语雀知识库」设置页自上而下四个区域：
+
+| 区域 | 元素 | 说明 |
+| --- | --- | --- |
+| ① 连接区 | `Access Token` 输入框 + 保存；`连接测试`；`刷新目录` | Token 已配置时显示绿色「已配置」徽章；刷新目录 = 从语雀重新拉取最新目录树 |
+| ② 同步状态行 | 上次同步时间 / 剩余额度 / 已索引文档数；`立即同步` | 剩余额度 = 语雀每小时 5000 次的共享配额剩余 |
+| ③ 同步进度条 | 正在同步的库 + 完成数 + 错误数 | 仅同步进行中显示 |
+| ④ 树形目录 | 工具条：`全部展开` / `全部折叠` / 按名称过滤输入框；每个知识库为一行（开关 + 文档数），展开后按分组显示文档（每篇也有开关） | **开关即时生效**：关掉某库/某文档后，本地检索、云端检索、被动注入都不会再命中它（索引保留，重新打开立即恢复） |
+
+## 对话中使用方式
+
+### 被动使用（推荐，零学习成本）
+
+插件在每个对话回合自动判断：对话内容与你的语雀文档相关时，自动检索并注入文档片段。**不需要任何特殊说法**。注入内容以 `[yuque-kb-auto]` 开头、带文档标题与来源，模型会引用并注明出处。
+
+### 显式使用（按需）
+
+| 说法示例 | 触发行为 |
+| --- | --- |
+| 「在语雀里搜一下 `关键词`」 | `kb_search` 本地目录检索（标题/路径，零额度） |
+| 「搜索语雀云端：`关键词`」 | `kb_search_remote` 语雀云端全文搜索（消耗少量额度，能搜到未同步的新文档） |
+| 「读一下语雀里《标题》这篇文档」 | `kb_read` 在线读取正文（分块返回，消耗少量额度） |
+| 「先同步一下语雀目录」 | `kb_sync` 增量同步目录（约 17 个请求） |
+
+### 使用边界
+
+- **本地只存目录快照，不存正文**：`kb_read` / `kb_search_remote` 为在线读取，每次消耗语雀 API 额度（单篇 1-2 个请求，日常使用远低于 5000/小时限额）
+- **语雀风控**：语雀对短时间内大量连续请求有风控（一次约 25 连发即触发、数小时不解）。插件已按只读、节流、增量、按需在线的设计规避；**如果短时间内反复大量同步/阅读，仍可能短暂触发**，此时界面会提示限流，等待数小时即可恢复
+- **开关语义**：禁用 = 对该库/文档的全部检索（本地 + 云端 + 被动注入）不再命中，立即生效；启用后无需重新同步
+- 团队知识库暂不支持（个人账号 + 个人知识库）；图片以 URL 引用保留
+
+## 高级配置（可选）
+
+默认配置即可直接使用。以下键可在 profile 的 `cordis.patch.yml` 或设置页配置（多数键在设置页可见）：
+
+```yaml
+- id: yuque-kb
+  config:
+    autoInject: true          # 被动注入总开关（默认开）
+    autoInjectRemote: true    # 本地未命中时是否回退语雀云端搜索（每次探测 1 请求）
+    autoInjectIntervalMs: 30000   # 同一会话内被动注入的最小间隔（毫秒）
+    syncOnStartup: false      # 启动时自动增量同步目录
+    rateLimitPerSec: 3        # 语雀请求节流（每秒）
+    searchLimit: 8            # kb_search 默认返回条数
+```
+
+## 常见问题
+
+- **连接测试报 `rate-limited: Too Many Requests`**：语雀当前对该账号处于临时风控（短时间请求过多触发），等待数小时会自动解除；期间勿反复点击测试
+- **自动注入没有出现**：确保已同步目录（`立即同步`）、该文档未被禁用、且消息长度/间隔满足触发条件；也可以直接点名方式验证（见上表）
+- **同步后树里文档数是旧的**：点「刷新目录」从语雀重新拉取最新清单（不消耗正文额度）
+- **想彻底关闭该插件**：设置页 `enabled: false` 或 `dsh plugin --profile web remove dsh-yuque-kb`
+
+## 开发者信息
+
+- 构建：`pnpm build`（tsc + tsdown，宿主 ESM + 浏览器 bundle）；测试：`pnpm test`（当前 100/100）
+- 发布：`npm publish`（需要 npmjs 登录与 2FA/恢复码）
+- 技术设计见仓库 `.ref/`（开发计划 SSOT、设计决策、阶段交接），属于开发过程资产，不入 npm 包
+
+## 许可证
+
+[Apache-2.0](./LICENSE)
