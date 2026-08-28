@@ -129,7 +129,6 @@ dsh plugin --profile web add ./dsh-yuque-kb-0.1.0.tgz     # tarball
 
 - 构建：`pnpm build`（tsc + tsdown，宿主 ESM + 浏览器 bundle）；测试：`pnpm test`（当前 100/100）
 - 发布：`npm publish`（需要 npmjs 登录与 2FA/恢复码）
-- 技术设计见仓库 `.ref/`（开发计划 SSOT、设计决策、阶段交接），属于开发过程资产，不入 npm 包
 
 ## 许可证
 
