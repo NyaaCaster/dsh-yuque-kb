@@ -7,6 +7,7 @@
  * - everything else through the /api/dsh-yuque-kb routes (immediate effect)
  */
 import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { IconArchiveOutline20 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { KbApi } from '../api.ts'
 import type { StatusPayload, TestResult, TreePayload } from '../types.ts'
 import type { YuqueKbKey } from '../locales.ts'
@@ -222,6 +223,13 @@ export function YuqueKbSection(props: YuqueKbSectionProps): React.JSX.Element {
   return (
     <SectionErrorBoundary t={t}>
       <div className={css.section}>
+      {/* Page head: the settings nav icon is shell-fixed (ui-settings-general
+          navIcon hard-codes models/agent-presets/plugins; third-party sections
+          cannot change it), so the section carries its own branded icon. */}
+      <div className={css.pageHead}>
+        <IconArchiveOutline20 className={css.pageIcon} size={20} />
+        <span className={css.pageTitle}>{t('nav')}</span>
+      </div>
       {/* ① Connection: token + test. */}
       <div className={css.block}>
         <div className={css.row}>

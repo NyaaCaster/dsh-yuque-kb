@@ -5,6 +5,23 @@
   gap: 12px;
 }
 
+.pageHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.pageIcon {
+  color: var(--dsw-alias-label-secondary, #4c5057);
+}
+
+.pageTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary, #1f2329);
+}
+
 .block {
   border: 1px solid var(--dsw-alias-border-inverted, rgba(127, 127, 127, 0.25));
   border-radius: 10px;

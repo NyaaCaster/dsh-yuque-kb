@@ -125,7 +125,8 @@ function Toggle(props: {
 }
 
 /**
- * Render the full tree.
+ * Render the full tree: one group heading for the personal books, then the
+ * repo rows flat (no per-repo heading duplication).
  * @param props - repos, expansion map, filter, callbacks, copy.
  */
 export function KbTree(props: KbTreeProps): React.JSX.Element {
@@ -137,30 +138,29 @@ export function KbTree(props: KbTreeProps): React.JSX.Element {
     return (text: string): boolean => text.toLowerCase().includes(needle)
   }, [filter, filterActive])
 
-  const repoVisible = (repo: RepoNode): boolean =>
-    !filterActive || matchesFilter(repo.name) || repo.docs.some(doc => matchesFilter(doc.title) || matchesFilter(doc.path))
+  const visible = repos.filter(repo => !filterActive || matchesFilter(repo.name)
+    || repo.docs.some(doc => matchesFilter(doc.title) || matchesFilter(doc.path)))
 
   return (
     <div className={css.tree}>
-      <ul className={css.sectionList}>
-        {repos.filter(repoVisible).map(repo => (
-          <li key={repo.namespace} className={css.sectionItem}>
-            <div className={css.sectionHeader}>{t('myRepos')}</div>
-            <ul className={css.repoList}>
-              <RepoRow
-                repo={repo}
-                expanded={props.expanded[`repo:${repo.namespace}`] === true || props.expandAll}
-                filterActive={filterActive}
-                matchesFilter={matchesFilter}
-                t={t}
-                onToggleExpand={props.onToggleExpand}
-                onToggle={props.onToggle}
-              />
-            </ul>
-          </li>
+      {visible.length > 0
+        ? <div className={css.sectionHeader}>{t('myRepos')}</div>
+        : null}
+      <ul className={css.repoList}>
+        {visible.map(repo => (
+          <RepoRow
+            key={repo.namespace}
+            repo={repo}
+            expanded={props.expanded[`repo:${repo.namespace}`] === true || props.expandAll}
+            filterActive={filterActive}
+            matchesFilter={matchesFilter}
+            t={t}
+            onToggleExpand={props.onToggleExpand}
+            onToggle={props.onToggle}
+          />
         ))}
       </ul>
-      {repos.length === 0
+      {visible.length === 0
         ? <p className={css.empty}>{t('neverSynced')}</p>
         : null}
     </div>
