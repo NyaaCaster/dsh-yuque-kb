@@ -255,8 +255,16 @@ export interface KbEngine {
   status(): StatusPayload
   /** Local FTS search over enabled docs. */
   search(query: string, limit?: number, repo?: string): KbSearchResult
-  /** Block-paged body read; falls back to a live fetch when not indexed. */
+  /** Block-paged body read via the local catalogue record. */
   read(docId: string, startBlock?: number, maxBlocks?: number, signal?: AbortSignal): Promise<ReadResult>
+  /** Live body read by repo+slug (auto-injection for docs outside the catalogue). */
+  readByRef(
+    namespace: string,
+    slug: string,
+    title: string,
+    maxBlocks?: number,
+    signal?: AbortSignal,
+  ): Promise<{ title: string; repo: string; totalBlocks: number; blocks: ReadBlock[] }>
   /** Yuque cloud search (strip `<em>`, default scope = the account's repos). */
   searchRemote(options: RemoteSearchOptions, signal?: AbortSignal): Promise<RemoteSearchResult>
   /** Last known rate-limit snapshot (from the response tap), else domain. */
@@ -661,6 +669,24 @@ export function createEngine(engineOptions: KbEngineOptions): KbEngine {
     }
   }
 
+  async function readByRef(
+    namespace: string,
+    slug: string,
+    title: string,
+    maxBlocks = 4,
+    signal?: AbortSignal,
+  ): Promise<{ title: string; repo: string; totalBlocks: number; blocks: ReadBlock[] }> {
+    const client = makeClient(signal)
+    const { markdown } = await client.getDocMarkdown(namespace, slug)
+    const chunks = chunkMarkdown(markdown, { maxChars: engineOptions.config().blockCharLimit })
+    return {
+      title,
+      repo: namespace,
+      totalBlocks: chunks.length,
+      blocks: chunks.slice(0, Math.max(1, Math.floor(maxBlocks))).map(chunk => ({ type: chunk.type, text: chunk.text })),
+    }
+  }
+
   async function searchRemote(
     request: RemoteSearchOptions,
     signal?: AbortSignal,
@@ -727,6 +753,7 @@ export function createEngine(engineOptions: KbEngineOptions): KbEngine {
     status,
     search,
     read,
+    readByRef,
     searchRemote,
     rateRemaining,
   }

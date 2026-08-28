@@ -15,6 +15,7 @@ import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-tools'
 import { createEngine, type KbEngine } from './engine.ts'
+import { mountAutoInject } from './auto-inject.ts'
 import { openDomain, type KbDomain } from './storage/domain.ts'
 import { makeRoutes } from './routes.ts'
 import { kbReadTool, kbSearchRemoteTool, kbSearchTool, kbSyncTool } from './tools.ts'
@@ -50,6 +51,16 @@ export interface Config {
   blockCharLimit?: number
   /** Timeout budget for remote-fetch tools (`kb_read`, `kb_search_remote`; ms). */
   timeoutMs?: number
+  /** Passively probe the Yuque catalogue on conversation turns and inject
+   * relevant document fragments (default true). */
+  autoInject?: boolean
+  /** Let the passive probe fall back to the Yuque cloud search when the local
+   * catalogue misses (default true; one request per probe). */
+  autoInjectRemote?: boolean
+  /** Minimum milliseconds between passive injections in one session (default 30000). */
+  autoInjectIntervalMs?: number
+  /** Minimum user-text length that may trigger a passive probe (default 8). */
+  autoInjectMinQueryChars?: number
 }
 
 export const Config: z<Config> = z.object({
@@ -61,13 +72,17 @@ export const Config: z<Config> = z.object({
   searchLimit: z.number().default(8),
   blockCharLimit: z.number().default(512),
   timeoutMs: z.number().default(30000),
+  autoInject: z.boolean().default(true),
+  autoInjectRemote: z.boolean().default(true),
+  autoInjectIntervalMs: z.number().default(30000),
+  autoInjectMinQueryChars: z.number().default(8),
 })
 
 /** Order of the announcement section within the tool-guidance band. */
 const SECTION_ORDER = 150
 
 /** Model-facing announcement: plugin presence, capabilities, triggers, limits. */
-export const KB_GUIDANCE = '本机已安装 dsh-yuque-kb 插件（语雀知识库）：kb_sync 增量同步语雀目录到本地、kb_search 按标题/路径检索本地目录（不消耗语雀 API 额度）、kb_read 在线分块阅读文档正文、kb_search_remote 语雀云端全文搜索（消耗 API 额度）。当用户提到「语雀/知识库/文档库/某篇已知文档」时：先 kb_search 本地检索；本地未命中再用 kb_search_remote；需要最新内容或首次使用前先 kb_sync。限制：本地只存目录快照（不存正文，避免语雀风控）；kb_read/kb_search_remote 实时回源语雀，消耗 API 额度；同步范围与文档开关在管理设置里配置。'
+export const KB_GUIDANCE = '本机已安装 dsh-yuque-kb 插件（语雀知识库——你的个人语雀文档构成的外部记忆）：①被动注入：对话内容与你的语雀文档相关时，插件会本回合自动检索并注入相关文档片段（消息标注 [yuque-kb-auto]），无需点名插件或文档；对注入内容应直接使用并标注出处「语雀：《标题》」。②显式工具：kb_search 按标题/路径检索本地目录（零额度）、kb_read 在线分块读正文、kb_search_remote 语雀云端全文搜索（消耗额度）、kb_sync 增量同步目录。限制：本地只存目录快照；在线检索消耗语雀 API 额度；开关与禁用范围在设置「语雀知识库」里配置。'
 
 /** Schema defaults re-read by hand-built test contexts (the loader applies them). */
 const DEFAULTS = {
@@ -79,6 +94,10 @@ const DEFAULTS = {
   searchLimit: 8,
   blockCharLimit: 512,
   timeoutMs: 30_000,
+  autoInject: true,
+  autoInjectRemote: true,
+  autoInjectIntervalMs: 30_000,
+  autoInjectMinQueryChars: 8,
 }
 
 /** The effective live config (settings section first, schema defaults last). */
@@ -94,6 +113,10 @@ function resolveConfig(value: Config): ResolvedConfig {
     searchLimit: value.searchLimit ?? DEFAULTS.searchLimit,
     blockCharLimit: value.blockCharLimit ?? DEFAULTS.blockCharLimit,
     timeoutMs: value.timeoutMs ?? DEFAULTS.timeoutMs,
+    autoInject: value.autoInject ?? DEFAULTS.autoInject,
+    autoInjectRemote: value.autoInjectRemote ?? DEFAULTS.autoInjectRemote,
+    autoInjectIntervalMs: value.autoInjectIntervalMs ?? DEFAULTS.autoInjectIntervalMs,
+    autoInjectMinQueryChars: value.autoInjectMinQueryChars ?? DEFAULTS.autoInjectMinQueryChars,
   }
 }
 
@@ -118,6 +141,18 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       searchLimit: resolve().searchLimit,
       blockCharLimit: resolve().blockCharLimit,
       timeoutMs: resolve().timeoutMs,
+    }),
+  })
+
+  // The passive knowledge loop: screen every turn's first step against the
+  // catalogue and inject relevant document fragments (see src/auto-inject.ts).
+  mountAutoInject(ctx, {
+    engine,
+    config: () => ({
+      enabled: resolve().autoInject,
+      autoInjectRemote: resolve().autoInjectRemote,
+      intervalMs: resolve().autoInjectIntervalMs,
+      minQueryChars: resolve().autoInjectMinQueryChars,
     }),
   })
 

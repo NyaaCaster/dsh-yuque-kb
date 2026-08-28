@@ -14,6 +14,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import type { Agent } from '@deepseek-ai/dsh-agent'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import Storage, { storageBackendServiceKey } from '@deepseek-ai/dsh-storage'
 import type { StorageBackend, KvFacet, KvUnit, KvUnitDescriptor } from '@deepseek-ai/dsh-storage'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
@@ -415,6 +417,45 @@ describe('composition: kb_sync / kb_search / kb_read', () => {
     const result = await runTool(h.ctx, 'kb_sync', { run_in_background: true })
     expect(result.isError).toBe(true)
     expect(textOf(result)).toContain('background jobs unavailable: load @deepseek-ai/dsh-jobs')
+  })
+})
+
+describe('composition: passive auto-inject', () => {
+  it('injects a relevant fragment on agent/pre-step and stays silent for greetings', async () => {
+    const h = await harness()
+    await runTool(h.ctx, 'kb_sync', {})
+    const fakeAgent = { id: 'sess-auto', session: { events: [] } } as unknown as Agent
+
+    // A substantive turn: the cloud probe catches the mock search (title 酒馆配置)
+    // and injects its summary (its doc body route is not mocked → summary fallback).
+    const decision = await h.ctx.waterfall(
+      'agent/pre-step',
+      { agent: fakeAgent, turn: 1, step: 1, signal: new AbortController().signal, messages: [] },
+      async () => ({
+        kind: 'enter' as const,
+        messages: [createUserMessage({
+          content: [{ type: 'text', text: '我想看看酒馆的配置方法在哪里' }],
+          source: { kind: 'user' },
+        })],
+      }),
+    )
+    const messages = (decision as { messages: Array<{ content?: Array<{ type: string; text?: string }> }> }).messages
+    const text = messages.map(message => (message.content ?? []).map(block => block.text ?? '').join('')).join('\n')
+    expect(text).toContain('[yuque-kb-auto]')
+    expect(text).toContain('酒馆配置')
+
+    // Greetings never probe.
+    const greeting = await h.ctx.waterfall(
+      'agent/pre-step',
+      { agent: fakeAgent, turn: 2, step: 1, signal: new AbortController().signal, messages: [] },
+      async () => ({
+        kind: 'enter' as const,
+        messages: [createUserMessage({ content: [{ type: 'text', text: '你好' }], source: { kind: 'user' } })],
+      }),
+    )
+    const greetingText = (greeting as { messages: Array<{ content?: Array<{ text?: string }> }> }).messages
+      .map(message => (message.content ?? []).map(block => block.text ?? '').join('')).join('\n')
+    expect(greetingText).not.toContain('[yuque-kb-auto]')
   })
 })
 
